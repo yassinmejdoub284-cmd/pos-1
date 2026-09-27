@@ -1,0 +1,4 @@
+import {createHmac,randomBytes,timingSafeEqual,createHash} from 'node:crypto';
+export const secureEqual=(a,b)=>typeof a==='string'&&typeof b==='string'&&timingSafeEqual(createHash('sha256').update(a).digest(),createHash('sha256').update(b).digest());
+export function adminToken(secret,now=Date.now()){const body=Buffer.from(JSON.stringify({exp:now+3600000,nonce:randomBytes(16).toString('hex')})).toString('base64url');return body+'.'+createHmac('sha256',secret).update(body).digest('base64url');}
+export function validAdminToken(token,secret,now=Date.now()){try{if(typeof token!=='string'||token.length>1000)return false;const [body,signature,extra]=token.split('.');if(extra||!secureEqual(signature,createHmac('sha256',secret).update(body).digest('base64url')))return false;const payload=JSON.parse(Buffer.from(body,'base64url').toString());return Number.isSafeInteger(payload.exp)&&payload.exp>now&&payload.exp<=now+3600000;}catch{return false;}}

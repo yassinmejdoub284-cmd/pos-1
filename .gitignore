@@ -16,3 +16,6 @@ coverage/
 *.pfx
 Thumbs.db
 Desktop.ini
+
+public/
+.vercel/

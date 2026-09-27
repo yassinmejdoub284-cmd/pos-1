@@ -10,9 +10,11 @@
     "preview": "node scripts/preview.cjs",
     "test": "node scripts/test.cjs",
     "cloud": "node scripts/cloud.cjs",
-    "build": "electron-builder --win portable --publish never"
+    "build": "node scripts/build.cjs",
+    "build:web": "node scripts/build-web.cjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "electron": "40.9.1",
     "electron-builder": "26.0.12"
   },
@@ -34,5 +36,11 @@
       "artifactName": "Samurai-POS-${version}.exe",
       "signAndEditExecutable": false
     }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }

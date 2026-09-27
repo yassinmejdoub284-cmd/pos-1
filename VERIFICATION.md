@@ -13,7 +13,7 @@ Date : 26 septembre 2026. Bases de test séparées des données de production.
 
 ## Résultats
 
-- 40 tests automatisés réussis, aucun échec.
+- 45 tests automatisés réussis, aucun échec.
 - Les 25 contrôles de la version 0.1 sont conservés : calculs, permissions, tickets, idempotence, crédit, redémarrage, pagination, positions et synchronisation HTTP.
 - Remise d’un ticket mixte répartie en millimes : 7 DT + 2 DT − 1 DT = 8 DT ; filtres par famille et produit donnent 6,222 DT et 1,778 DT, soit exactement 8 DT.
 - Filtres de période, famille, produit, paiement, service et caissier ; remboursement imputé à sa date et noms des filtres imprimés.
@@ -36,3 +36,7 @@ Exécutable portable 0.3.0 démarré et arrêté normalement dans un dossier iso
 ## Afficheur VFD
 
 Quatre tests vérifient les paramètres série, la limitation ASCII 20 × 2, le prix produit avec supplément calculé par le moteur, le total après remise, les permissions, la conservation des paramètres et les ventes malgré une panne. Parcours navigateur : Chapati chawarma + fromage = 8.000 DT, puis TOTAL A PAYER 8.000 DT après encaissement avec impression. Bouton de test vérifié en simulation. Ports Windows COM6 et COM7 détectés. Le pilote conserve sa connexion, ferme le port à la sortie, et récupère après une tentative sur COM999 inexistant. Aucun envoi sur COM6 ou COM7. La validation physique et le protocole du modèle restent à confirmer.
+
+## Vercel et suivi en ligne
+
+45 tests réussis. La construction Vercel produit six fichiers statiques dans public et utilise les fonctions API PostgreSQL. Tests PostgreSQL exécutés avec PGlite (moteur PostgreSQL local), sans identifiant ni base externe : synchronisation réelle du moteur caisse, replay après perte de réponse, absence de doublons, conflits de catalogue, rollback financier, rapports filtrés, soldes clients/fournisseurs, clôture et authentification reconnue par une autre instance. Parcours navigateur de démonstration : ventes 15 DT, crédit client restant 4 DT, dette fournisseur 14 DT, clôture attendue/comptée 55 DT. Aucune dépendance de production vulnérable signalée par npm audit --omit=dev lors du contrôle. La base Neon et les secrets Vercel ne sont pas encore configurés ; le déploiement réel reste à vérifier après cette étape.

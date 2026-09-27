@@ -5,6 +5,7 @@ import { readFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensure, integer, PosError, dayInTunis } from './money.mjs';
+import {cloudData} from './cloud-data.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const digest=value=>createHash('sha256').update(value).digest();
 const same=(a,b)=>typeof a==='string'&&timingSafeEqual(digest(a),digest(b));
@@ -61,8 +62,8 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
     try{
       const url=new URL(req.url,'http://localhost');
       if(req.method==='GET'&&url.pathname==='/health')return send(200,{ok:true,version:1});
-      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/styles.css'].includes(url.pathname)){
-        const path=url.pathname==='/'?'online.html':url.pathname.slice(1);res.writeHead(200,{'Content-Type':path.endsWith('.html')?'text/html; charset=utf-8':(path.endsWith('.js')||path.endsWith('.mjs'))?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff'});return res.end(readFileSync(resolve(root,'frontend',path)));
+      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/styles.css','/theme.css','/online.css'].includes(url.pathname)){
+        const path=url.pathname==='/'?'online.html':url.pathname==='/online.js'?'cloud-ui.mjs':url.pathname.slice(1);res.writeHead(200,{'Content-Type':path.endsWith('.html')?'text/html; charset=utf-8':(path.endsWith('.js')||path.endsWith('.mjs'))?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff'});return res.end(readFileSync(resolve(root,'frontend',path)));
       }
       let body={};if(req.method==='POST'){ensure(req.headers['content-type']?.startsWith('application/json'),'JSON requis.',415);let size=0,raw='';for await(const chunk of req){size+=chunk.length;ensure(size<=2_000_000,'Requête trop volumineuse.',413);raw+=chunk;}body=JSON.parse(raw);}
       if(req.method==='POST'&&url.pathname==='/sync'){ensure(same(req.headers.authorization||'',`Bearer ${syncToken}`),'Clé incorrecte.',401);return send(200,sync(body));}
@@ -72,11 +73,13 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
         const token=randomBytes(32).toString('hex');sessions.set(token,Date.now()+3600000);return send(200,{token});
       }
       const token=(req.headers.authorization||'').replace(/^Bearer /,'');ensure((sessions.get(token)||0)>Date.now(),'Connexion requise.',401);
+      if(req.method==='GET'&&url.pathname==='/admin/data')return send(200,dashboard(Object.fromEntries(url.searchParams)));
       if(req.method==='GET'&&url.pathname==='/admin/report')return send(200,report(url.searchParams.get('day')||dayInTunis()));
       throw new PosError('Page introuvable.',404);
     }catch(error){send(error.status||400,{error:error instanceof SyntaxError?'Requête JSON invalide.':error.message});}
   });
-  return {server,db,sync,report,close:()=>{server.close();db.close();}};
+  function dashboard(args){return cloudData({records:db.prepare('SELECT type,payload FROM records').all().map(r=>({...r,payload:JSON.parse(r.payload)})),entities:db.prepare('SELECT * FROM entities').all().map(r=>({...r,data:JSON.parse(r.data)})),devices:db.prepare('SELECT * FROM devices ORDER BY last_seen DESC').all()},args);}
+  return {server,db,sync,report,dashboard,close:()=>{server.close();db.close();}};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const cloud=createCloud({file:process.env.POS_CLOUD_DB||'data/cloud.db',syncToken:process.env.SYNC_TOKEN,adminPassword:process.env.ADMIN_PASSWORD});

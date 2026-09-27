@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --omit=dev",
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "public",
+  "functions": { "api/cloud.js": { "maxDuration": 30 } },
+  "rewrites": [
+    { "source": "/sync", "destination": "/api/cloud?route=sync" },
+    { "source": "/health", "destination": "/api/cloud?route=health" },
+    { "source": "/admin/:path*", "destination": "/api/cloud?route=admin/:path*" }
+  ],
+  "headers": [{"source":"/(.*)","headers":[
+    {"key":"X-Content-Type-Options","value":"nosniff"},
+    {"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"}
+  ]}]
+}

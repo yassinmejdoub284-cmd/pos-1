@@ -1,0 +1,10 @@
+import {randomUUID} from 'node:crypto';
+import {openDatabase} from '../backend/database.mjs';
+import {PosService} from '../backend/service.mjs';
+import {seedDemo} from '../backend/demo.mjs';
+import {createCloud} from '../backend/cloud.mjs';
+import {SyncEngine} from '../backend/sync.mjs';
+const cloud=createCloud({file:':memory:',syncToken:'demo-only-'.repeat(4),adminPassword:'online-demo-password'}),store=openDatabase(':memory:'),service=new PosService(store,{testMode:true});await seedDemo(service);const {token}=await service.call('login',{name:'admin',pin:'246810'}),call=(a,b={})=>service.call(a,b,token),find=(k,n)=>service.entities(k).find(x=>x.name.includes(n));
+const product=find('product','Chapati chawarma'),extra=find('supplement','Fromage'),client=service.entities('client')[0],supplier=service.entities('supplier')[0],category=service.entities('expenseCategory')[0];
+await call('sale',{requestId:randomUUID(),items:[{productId:product.id,quantity:1,supplements:[extra.id]}],payment:'cash',received:8000,print:false});await call('sale',{requestId:randomUUID(),items:[{productId:product.id,quantity:1}],payment:'credit',clientId:client.id,print:false});await call('clientPayment',{requestId:randomUUID(),clientId:client.id,amount:3000,method:'cash'});await call('expense',{requestId:randomUUID(),description:'Achat de stock',amount:20000,source:'credit',supplierId:supplier.id,categoryId:category.id});await call('supplierPayment',{requestId:randomUUID(),supplierId:supplier.id,amount:6000,method:'cash'});await call('closeSession',{closing:55000});const settings=service.settings();settings.sync={enabled:true,endpoint:'http://localhost',intervalHours:5};service.put('settings',JSON.stringify(settings));await new SyncEngine(service,()=>'demo-only-'.repeat(4),async(url,o)=>({ok:true,json:async()=>cloud.sync(JSON.parse(o.body))})).run();
+cloud.server.listen(4190,'127.0.0.1',()=>console.log('Démonstration en ligne : http://127.0.0.1:4190 · mot de passe de test : online-demo-password'));

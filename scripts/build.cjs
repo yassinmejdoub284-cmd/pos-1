@@ -1,0 +1,1 @@
+if(process.env.VERCEL==='1')require('./build-web.cjs');else{const {spawn}=require('node:child_process');const builder=require.resolve('electron-builder/cli.js');const child=spawn(process.execPath,[builder,'--win','portable','--publish','never',...process.argv.slice(2)],{stdio:'inherit',windowsHide:true});child.on('exit',code=>process.exit(code??1));}
