@@ -1,0 +1,38 @@
+{
+  "name": "samurai-pos-v2",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "description": "Caisse bureau hors ligne, tickets 80 mm et synchronisation",
+  "scripts": {
+    "start": "electron .",
+    "preview": "node scripts/preview.cjs",
+    "test": "node scripts/test.cjs",
+    "cloud": "node scripts/cloud.cjs",
+    "build": "electron-builder --win portable --publish never"
+  },
+  "devDependencies": {
+    "electron": "40.9.1",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "tn.samurai.pos.v2",
+    "productName": "Samurai POS",
+    "compression": "store",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "frontend/**",
+      "backend/**",
+      "desktop/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "artifactName": "Samurai-POS-${version}.exe",
+      "signAndEditExecutable": false
+    }
+  }
+}
