@@ -10,7 +10,7 @@ Application Windows de caisse avec base locale SQLite et service de synchronisat
 
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.3.1 : application bureau, serveur de synchronisation, captures et 46 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.3.2 : application bureau, serveur de synchronisation, captures et 48 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -22,13 +22,13 @@ npm test
 npm run build
 ```
 
-L’exécutable est créé dans `release/Samurai-POS-0.3.1.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
+L’exécutable est créé dans `release/Samurai-POS-0.3.2.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
 
 ![Afficheur VFD : exemple de total](captures/afficheur-total-v03.png)
 
 ## Démarrer sur Windows
 
-1. Ouvrir `release/Samurai-POS-0.3.1.exe`.
+1. Ouvrir `release/Samurai-POS-0.3.2.exe`.
 2. Au premier lancement, créer l’établissement, le compte administrateur et son code personnel. Aucun code de production n’est préinstallé.
 3. Créer les familles, produits, suppléments, commentaires et catégories de charges dans le catalogue.
 4. Dans **Catalogue → Organiser l’affichage**, sélectionner un produit, cliquer sur sa nouvelle place et enregistrer. Les pages de caisse contiennent 12 produits, sauf la dernière si le catalogue n’est pas un multiple de 12. Les filtres conservent l’ordre choisi.
@@ -36,6 +36,10 @@ L’exécutable est créé dans `release/Samurai-POS-0.3.1.exe`. `npm start` lan
 6. Ouvrir une session avec son fond de caisse puis commencer les ventes.
 
 Le premier lancement nécessite l’accès habituel en écriture au dossier AppData du compte Windows. Node, Internet et le dossier du code source ne sont pas nécessaires pour utiliser l’exécutable. Les données restent dans le dossier de données Electron de l’application sous AppData/Roaming, avec le fichier `samurai-pos.sqlite`.
+
+## Vider l'historique local
+
+Dans **Paramètres → Réglages de caisse → Vider le stockage**, l'administrateur peut retirer les ventes et clôtures de ce poste après avoir fermé toutes les caisses et saisi le code de sécurité prévu. Sauvegarder d'abord la base avec le bouton des paramètres. Les charges, règlements, soldes clients, produits, familles, fournisseurs, employés et réglages sont conservés. Les données déjà synchronisées restent dans la base en ligne. Des références techniques minimales aux anciennes sessions sont conservées localement lorsque des charges ou règlements en dépendent ; leurs détails de clôture sont effacés et ne figurent plus dans les historiques.
 
 ## Encaissement direct
 
@@ -115,4 +119,4 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 
 ## État de livraison
 
-Version 0.3.1 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 46 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+Version 0.3.2 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 48 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.

@@ -2,9 +2,9 @@
 
 ## Le fichier à remettre
 
-Remettre **Samurai-POS-0.3.1.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
+Remettre **Samurai-POS-0.3.2.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
 
-Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.1.exe`.
+Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.2.exe`.
 
 ## 1. Copier et démarrer
 
@@ -14,6 +14,8 @@ Sur le poste de développement, pour reconstruire le fichier : installer Node.js
 4. Au premier démarrage, saisir le nom de l’établissement, créer l’administrateur et choisir son code de 6 à 12 chiffres. Il n’y a pas de compte de production préinstallé.
 
 Le fichier est actuellement non signé : Windows peut signaler un éditeur inconnu. Vérifier que le fichier provient bien de votre livraison avant toute autorisation d’exécution. Fermer une ancienne version avant de lancer une mise à jour.
+
+Une mise à jour du fichier EXE conserve la base du même compte Windows dans AppData. Le nouveau bouton **Vider le stockage** n'efface rien pendant l'installation : seul un administrateur peut l'utiliser depuis les paramètres avec le code de sécurité, après fermeture de toutes les caisses.
 
 ## 2. Préparer les modules
 

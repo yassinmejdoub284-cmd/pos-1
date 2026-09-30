@@ -24,6 +24,8 @@ export function openDatabase(path) {
     CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, user_id TEXT, action TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS closure_print_jobs (id TEXT PRIMARY KEY, session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id), state TEXT NOT NULL DEFAULT 'pending', error TEXT, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sync_conflicts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS purged_sessions (id TEXT PRIMARY KEY REFERENCES sessions(id));
+    CREATE TABLE IF NOT EXISTS client_opening_balances (client_id TEXT PRIMARY KEY REFERENCES entities(id), amount INTEGER NOT NULL);
   `);
   const get = key => db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;
   const put = (key,value) => db.prepare('INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));

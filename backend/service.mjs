@@ -16,6 +16,7 @@ const now = () => new Date().toISOString();
 const hashPin = (pin, salt) => pbkdf2Sync(pin, salt, 150000, 32, 'sha256').toString('hex');
 const safeUser = row => ({ id: row.id, name: row.name, permissions: parse(row.permissions), active: !!row.active, admin: !!row.admin });
 const text = (value, max=500) => typeof value === 'string' ? value.trim().slice(0,max) : '';
+const CLEAR_LOCAL_CODE_HASH = '4cd20be3170338a51a08f4259a1e13a1fd0116d74ff7811dac2040cfef7b59b9';
 
 export class PosService {
   constructor(store, options={}) {
@@ -71,10 +72,11 @@ export class PosService {
       supplierPayment:()=>{this.require(user,'suppliers');return this.supplierPayment(args,user);},
       report:()=>{this.require(user,'reports');return this.report(args);},
       closures:()=>this.closures(args,user),
-      previewClosure:()=>this.options.closureReceipt?.(this.closureDetails(args.id,user),this.settings()),
-      printClosure:()=>this.options.printClosure?.(this.closureDetails(args.id,user)),
+      previewClosure:()=>{const closure=this.closureDetails(args.id,user);return this.options.closureReceipt?.(closure,this.settings());},
+      printClosure:()=>{const closure=this.closureDetails(args.id,user);return this.options.printClosure?.(closure);},
       saveUser:()=>{this.require(user,'users');return this.saveUser(args,user);},
       saveSettings:()=>{this.require(user,'settings');return this.saveSettings(args,user);},
+      clearLocalHistory:()=>this.clearLocalHistory(args,user),
       sync:()=>{this.require(user,'sync');ensure(this.options.sync,'Synchronisation indisponible.');return this.options.sync.run();},
       resolveConflict:()=>{this.require(user,'sync');return this.options.sync.resolve(args);},
       printers:()=>{this.require(user,'settings');return this.options.printers?.() || [];},
@@ -119,7 +121,7 @@ export class PosService {
       expenses:allowed('expenses')?this.db.prepare('SELECT * FROM expenses ORDER BY created_at DESC LIMIT 100').all().map(r=>({...parse(r.data),id:r.id,amount:r.amount,source:r.source,createdAt:r.created_at,day:r.day})):[],
       users:allowed('users')?this.db.prepare('SELECT * FROM users ORDER BY name').all().map(safeUser):[],
       reportUsers:allowed('reports')?this.db.prepare('SELECT id,name FROM users ORDER BY name').all():[],
-      sessions:allowed('reports')?this.db.prepare('SELECT * FROM sessions ORDER BY opened_at DESC LIMIT 100').all().map(r=>this.sessionData(r)):[],
+      sessions:allowed('reports')?this.db.prepare('SELECT * FROM sessions WHERE id NOT IN (SELECT id FROM purged_sessions) ORDER BY opened_at DESC LIMIT 100').all().map(r=>this.sessionData(r)):[],
       clientBalances:allowed('clients')||allowed('sell')?this.clientBalances():{},
       clientPayments:allowed('clients')?this.db.prepare('SELECT p.*,e.data client,u.name userName FROM client_payments p JOIN entities e ON p.client_id=e.id JOIN users u ON p.user_id=u.id ORDER BY p.created_at DESC LIMIT 100').all().map(r=>({id:r.id,clientId:r.client_id,clientName:parse(r.client).name,userName:r.userName,amount:r.amount,method:r.method,createdAt:r.created_at})):[],
       supplierBalances:allowed('suppliers')||allowed('expenses')?this.supplierBalances():{},
@@ -127,7 +129,7 @@ export class PosService {
       sync:allowed('sync')?{pending:this.db.prepare("SELECT COUNT(*) n FROM outbox WHERE state='pending'").get().n,lastSuccess:this.get('syncLastSuccess')||null,error:this.get('syncLastError')||null,conflicts:this.db.prepare('SELECT * FROM sync_conflicts').all().map(r=>({...parse(r.data),id:r.id})),running:!!this.options.sync?.running}:null,
       printJobs:this.db.prepare("SELECT j.* FROM print_jobs j JOIN sales s ON j.sale_id=s.id WHERE s.user_id=? AND j.state!='done' ORDER BY j.created_at DESC LIMIT 30").all(user.id),
       closurePrintJobs:this.db.prepare("SELECT j.* FROM closure_print_jobs j JOIN sessions s ON j.session_id=s.id WHERE s.user_id=? AND j.state!='done' ORDER BY j.created_at DESC LIMIT 30").all(user.id),
-      lastClosure:this.db.prepare('SELECT * FROM sessions WHERE user_id=? AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT 1').all(user.id).map(r=>this.sessionData(r))[0]||null,
+      lastClosure:this.db.prepare('SELECT * FROM sessions WHERE user_id=? AND closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions) ORDER BY closed_at DESC LIMIT 1').all(user.id).map(r=>this.sessionData(r))[0]||null,
       supplierTotals:allowed('suppliers')?Object.fromEntries(this.db.prepare("SELECT json_extract(data,'$.supplierId') id,SUM(amount) amount FROM expenses GROUP BY id").all().filter(r=>r.id).map(r=>[r.id,r.amount])):{},
       permissions:PERMISSIONS,
     };
@@ -233,7 +235,8 @@ export class PosService {
     return this.transaction(()=>{const id=randomUUID(),createdAt=now(),day=dayInTunis();const data={id,requestId,categoryId:category.id,category:category.name,supplierId:supplier?.id||'',supplierName:supplier?.name||'',description,amount,source:args.source,userName:user.name,sessionId:session?.id||null,createdAt,day};this.db.prepare('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,?)').run(id,requestId,session?.id||null,user.id,day,createdAt,amount,args.source,JSON.stringify(data));this.emit('expense',data);this.audit(user,'expense.create',{id,amount});return data;});
   }
   clientBalances() {
-    const balances={};for(const row of this.db.prepare("SELECT client_id,SUM(total) n FROM sales WHERE payment='credit' AND voided_at IS NULL GROUP BY client_id").all())balances[row.client_id]=row.n;
+    const balances={};for(const row of this.db.prepare('SELECT client_id,amount FROM client_opening_balances').all())balances[row.client_id]=row.amount;
+    for(const row of this.db.prepare("SELECT client_id,SUM(total) n FROM sales WHERE payment='credit' AND voided_at IS NULL GROUP BY client_id").all())balances[row.client_id]=(balances[row.client_id]||0)+row.n;
     for(const row of this.db.prepare('SELECT client_id,SUM(amount) n FROM client_payments GROUP BY client_id').all())balances[row.client_id]=(balances[row.client_id]||0)-row.n;return balances;
   }
   supplierBalances(){const balances={};for(const row of this.db.prepare("SELECT json_extract(data,'$.supplierId') id,SUM(amount) amount FROM expenses WHERE source='credit' GROUP BY id").all())if(row.id)balances[row.id]=row.amount;for(const row of this.db.prepare('SELECT supplier_id id,SUM(amount) amount FROM supplier_payments GROUP BY supplier_id').all())balances[row.id]=(balances[row.id]||0)-row.amount;return balances;}
@@ -251,11 +254,29 @@ export class PosService {
   }
   report(args) {
     const filters=reportFilters(args);const parseSale=r=>({...parse(r.data),voidedAt:r.voided_at,voidReason:r.void_reason});
-    return buildReport({sales:this.db.prepare('SELECT * FROM sales WHERE day BETWEEN ? AND ? ORDER BY created_at').all(filters.from,filters.to).map(parseSale),refunds:this.db.prepare('SELECT * FROM sales WHERE voided_at IS NOT NULL').all().map(parseSale),expenses:this.db.prepare('SELECT * FROM expenses WHERE day BETWEEN ? AND ?').all(filters.from,filters.to).map(r=>({...parse(r.data),amount:r.amount})),sessions:this.db.prepare('SELECT * FROM sessions ORDER BY opened_at').all().map(r=>this.sessionData(r)),clientPayments:this.db.prepare('SELECT * FROM client_payments WHERE day BETWEEN ? AND ?').all(filters.from,filters.to),supplierPayments:this.db.prepare('SELECT * FROM supplier_payments WHERE day BETWEEN ? AND ?').all(filters.from,filters.to)},filters);
+    return buildReport({sales:this.db.prepare('SELECT * FROM sales WHERE day BETWEEN ? AND ? ORDER BY created_at').all(filters.from,filters.to).map(parseSale),refunds:this.db.prepare('SELECT * FROM sales WHERE voided_at IS NOT NULL').all().map(parseSale),expenses:this.db.prepare('SELECT * FROM expenses WHERE day BETWEEN ? AND ?').all(filters.from,filters.to).map(r=>({...parse(r.data),amount:r.amount})),sessions:this.db.prepare('SELECT * FROM sessions WHERE id NOT IN (SELECT id FROM purged_sessions) ORDER BY opened_at').all().map(r=>this.sessionData(r)),clientPayments:this.db.prepare('SELECT * FROM client_payments WHERE day BETWEEN ? AND ?').all(filters.from,filters.to),supplierPayments:this.db.prepare('SELECT * FROM supplier_payments WHERE day BETWEEN ? AND ?').all(filters.from,filters.to)},filters);
   }
-  closureDetails(id,user){this.requireClosureAccess(user);const row=this.db.prepare('SELECT * FROM sessions WHERE id=? AND closed_at IS NOT NULL').get(id);ensure(row,'Clôture introuvable.');ensure(user.admin||user.permissions.includes('reports')||row.user_id===user.id,'Accès à cette clôture refusé.',403);return this.sessionData(row);}
+  closureDetails(id,user){this.requireClosureAccess(user);const row=this.db.prepare('SELECT * FROM sessions WHERE id=? AND closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions)').get(id);ensure(row,'Clôture introuvable.');ensure(user.admin||user.permissions.includes('reports')||row.user_id===user.id,'Accès à cette clôture refusé.',403);return this.sessionData(row);}
   requireClosureAccess(user){ensure(user.admin||user.permissions.includes('close')||user.permissions.includes('reports'),'Permission de clôture ou rapport requise.',403);}
-  closures(args,user){this.requireClosureAccess(user);const filters=reportFilters({...args,from:args.from||'2000-01-01',to:args.to||dayInTunis()});return this.db.prepare('SELECT * FROM sessions WHERE closed_at IS NOT NULL ORDER BY closed_at DESC').all().filter(r=>{const day=dayInTunis(new Date(r.closed_at));return day>=filters.from&&day<=filters.to&&(!args.userId||r.user_id===args.userId)&&(user.admin||user.permissions.includes('reports')||r.user_id===user.id);}).map(r=>this.sessionData(r));}
+  closures(args,user){this.requireClosureAccess(user);const filters=reportFilters({...args,from:args.from||'2000-01-01',to:args.to||dayInTunis()});return this.db.prepare('SELECT * FROM sessions WHERE closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions) ORDER BY closed_at DESC').all().filter(r=>{const day=dayInTunis(new Date(r.closed_at));return day>=filters.from&&day<=filters.to&&(!args.userId||r.user_id===args.userId)&&(user.admin||user.permissions.includes('reports')||r.user_id===user.id);}).map(r=>this.sessionData(r));}
+  clearLocalHistory(args,user) {
+    ensure(user.admin,'Seul un administrateur peut vider le stockage.',403);
+    const supplied=typeof args.code==='string'?createHash('sha256').update(args.code).digest('hex'):'';
+    ensure(supplied.length===64&&timingSafeEqual(Buffer.from(supplied,'hex'),Buffer.from(CLEAR_LOCAL_CODE_HASH,'hex')),'Code de sécurité incorrect.',403);
+    ensure(!this.db.prepare('SELECT 1 FROM sessions WHERE closed_at IS NULL LIMIT 1').get(),'Clôturez toutes les caisses avant de vider le stockage.');
+    ensure(!this.options.sync?.running,'Attendez la fin de la synchronisation avant de vider le stockage.');
+    ensure(!this.db.prepare("SELECT 1 FROM print_jobs WHERE state='printing' UNION SELECT 1 FROM closure_print_jobs WHERE state='printing' LIMIT 1").get(),'Attendez la fin des impressions avant de vider le stockage.');
+    return this.transaction(()=>{
+      const sales=this.db.prepare('SELECT COUNT(*) n FROM sales').get().n;
+      const closures=this.db.prepare('SELECT COUNT(*) n FROM sessions WHERE closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions)').get().n;
+      for(const row of this.db.prepare("SELECT client_id,SUM(total) amount FROM sales WHERE payment='credit' AND voided_at IS NULL GROUP BY client_id").all())this.db.prepare('INSERT INTO client_opening_balances(client_id,amount) VALUES (?,?) ON CONFLICT(client_id) DO UPDATE SET amount=amount+excluded.amount').run(row.client_id,row.amount);
+      this.db.exec("DELETE FROM print_jobs; DELETE FROM closure_print_jobs; DELETE FROM sales; DELETE FROM outbox WHERE type IN ('sale','saleVoid','session'); DELETE FROM audit WHERE action IN ('sale.create','sale.void','session.open','session.close'); DELETE FROM purged_sessions;");
+      this.db.exec("DELETE FROM sessions WHERE id NOT IN (SELECT session_id FROM expenses WHERE session_id IS NOT NULL UNION SELECT session_id FROM client_payments UNION SELECT session_id FROM supplier_payments WHERE session_id IS NOT NULL);");
+      this.db.exec("INSERT OR IGNORE INTO purged_sessions(id) SELECT id FROM sessions; UPDATE sessions SET opening=0,closing=NULL,expected=NULL,variance=NULL,data='{}' WHERE id IN (SELECT id FROM purged_sessions);");
+      this.audit(user,'history.clear',{sales,closures,scope:'local'});
+      return {ok:true,sales,closures};
+    });
+  }
   saveUser(args,user) {
     const id=args.id||randomUUID();const previous=this.db.prepare('SELECT * FROM users WHERE id=?').get(id);const name=label(args.name,'Identifiant',60);const permissions=Array.isArray(args.permissions)?[...new Set(args.permissions)]:[];ensure(permissions.every(p=>PERMISSIONS.includes(p)),'Permission invalide.');
     const admin=!!args.admin,active=args.active!==false;ensure(id!==user.id||active,'Vous ne pouvez pas désactiver votre propre compte.');
