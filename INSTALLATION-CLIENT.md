@@ -2,9 +2,9 @@
 
 ## Le fichier à remettre
 
-Remettre **Samurai-POS-0.3.2.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
+Remettre **Samurai-POS-0.3.3.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
 
-Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.2.exe`.
+Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.3.exe`.
 
 ## 1. Copier et démarrer
 
@@ -28,6 +28,8 @@ Une mise à jour du fichier EXE conserve la base du même compte Windows dans Ap
 ## 3. Imprimante et afficheur
 
 Installer le pilote Windows de l’imprimante 80 mm et vérifier une page de test dans Windows. Dans **Paramètres → Imprimantes & tickets**, choisir l’imprimante client et l’imprimante cuisine. Elles peuvent être la même imprimante. Tester un ticket client, un bon cuisine et une clôture pour vérifier la taille, la coupe et les commentaires.
+
+Brancher le tiroir au connecteur RJ11/RJ12 de l'imprimante. Dans le même écran, activer **Ouvrir le tiroir-caisse après chaque impression**, choisir l'imprimante du tiroir, puis **Tester le tiroir**. La broche 2 est le réglage standard ; essayer la broche 5 si le câblage du tiroir le demande. Le pilote et l'imprimante doivent accepter la commande ESC/POS `ESC p` en impression Windows RAW.
 
 Pour un afficheur : installer son pilote, repérer son port dans le Gestionnaire de périphériques, ouvrir **Afficheur VFD**, choisir COM et les paramètres du fabricant, activer, enregistrer puis tester. Le protocole du modèle doit correspondre au choix Epson DM-D ou texte brut.
 

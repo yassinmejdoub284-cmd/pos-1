@@ -1,5 +1,6 @@
 const {app,BrowserWindow,ipcMain,dialog,safeStorage}=require('electron');
 const path=require('node:path'),fs=require('node:fs');
+const {pulseDrawer}=require('./cash-drawer.cjs');
 let mainWindow,service,engine,printQueue,serialTransport;
 app.setName('Samurai POS');
 if(process.env.POS_DATA_DIR){fs.mkdirSync(process.env.POS_DATA_DIR,{recursive:true});app.setPath('userData',path.resolve(process.env.POS_DATA_DIR));}
@@ -11,12 +12,21 @@ app.whenReady().then(async()=>{
   const getToken=()=>{try{return safeStorage.isEncryptionAvailable()&&fs.existsSync(keyPath)?safeStorage.decryptString(fs.readFileSync(keyPath)):'';}catch{return '';}};
   const saveSyncToken=token=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Le stockage protégé de Windows est indisponible.');fs.writeFileSync(keyPath,safeStorage.encryptString(token));};
   const printers=async()=>mainWindow.webContents.getPrintersAsync();
+  const within=(promise,ms)=>{let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('La détection des périphériques prend trop de temps.')),ms);})]).finally(()=>clearTimeout(timer));};
+  async function kickDrawer(currentPrinter=''){
+    try{
+      const config=service.settings().print;let printerName=config.drawerPrinter||config.clientPrinter||currentPrinter;
+      if(!printerName){const list=await within(printers(),4000);printerName=list.find(p=>p.isDefault)?.name||list.find(p=>!/(pdf|onenote|fax|xps)/i.test(p.name))?.name||'';}
+      const result=await pulseDrawer(printerName,config.drawerPin);service.put('drawerLastError','');return result;
+    }catch(error){service.put('drawerLastError',error.message);throw error;}
+  }
   async function printHtml(html,deviceName,copies=1){
-    if(deviceName){const list=await printers();if(!list.some(p=>p.name===deviceName))throw new Error(`Imprimante indisponible : ${deviceName}`);}
+    if(deviceName){const list=await within(printers(),4000);if(!list.some(p=>p.name===deviceName))throw new Error(`Imprimante indisponible : ${deviceName}`);}
     const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});
     win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     try{await win.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));await win.webContents.executeJavaScript('Promise.all([document.fonts.ready,...Array.from(document.images).map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r}))])');const pixels=await win.webContents.executeJavaScript('document.body.scrollHeight');const height=Math.max(60000,Math.min(1500000,Math.ceil(pixels*264.583)+8000));
       await new Promise((resolve,reject)=>win.webContents.print({silent:true,deviceName,printBackground:true,copies,pageSize:{width:80000,height},margins:{marginType:'none'},scaleFactor:100},(ok,error)=>ok?resolve():reject(new Error(error||'L’imprimante a refusé le ticket.'))));
+      if(service.settings().print.drawerEnabled)try{await kickDrawer(deviceName);}catch{/* Le ticket est déjà imprimé : ne jamais créer de doublon pour une panne du tiroir. */}
       return {ok:true};
     }finally{win.destroy();}
   }
@@ -26,6 +36,7 @@ app.whenReady().then(async()=>{
     printSale:(sale,kind)=>printQueue.printSale(sale,kind),
     printClosure:session=>printQueue.printClosure(session),
     printReport:(report,settings)=>printHtml(reportHtml(report,settings),settings.print.clientPrinter),
+    testDrawer:()=>kickDrawer(),
     backup:async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:'Sauvegarder la base de caisse',defaultPath:`Samurai-POS-${new Date().toISOString().slice(0,10)}.sqlite`,filters:[{name:'Base SQLite',extensions:['sqlite']}]});if(result.canceled)return {cancelled:true};if(path.resolve(result.filePath).toLowerCase()===path.resolve(store.path).toLowerCase())throw new Error('Choisissez un autre fichier que la base active.');if(fs.existsSync(result.filePath))throw new Error('Choisissez un nouveau nom pour conserver la sauvegarde existante.');store.db.prepare('VACUUM INTO ?').run(result.filePath);return {path:result.filePath};}
   });
   engine=new SyncEngine(service,getToken);service.options.sync=engine;
@@ -37,9 +48,9 @@ app.whenReady().then(async()=>{
     if(event.sender!==mainWindow.webContents)return {error:'Accès refusé.',status:403};
     try{if(JSON.stringify(args).length>2_000_000)throw new Error('Requête trop volumineuse.');const result=await service.call(action,args,token);if(action==='setupStatus')signalReady(result);if(action==='sale'||action==='closeSession')void runPrintJobs();return result;}catch(error){return {error:error.message,status:error.status||400};}
   });
-  const settings=service.settings();if(!settings.print.clientPrinter&&!settings.print.kitchenPrinter){try{const list=await printers();const physical=list.filter(p=>!/(pdf|onenote|fax|xps)/i.test(p.name));if(physical.length===1){settings.print.clientPrinter=physical[0].name;settings.print.kitchenPrinter=physical[0].name;store.put('settings',JSON.stringify(settings));}}catch{/* Printer discovery must not prevent offline sales. */}}
+  const settings=service.settings();if(!settings.print.clientPrinter&&!settings.print.kitchenPrinter){try{const list=await within(printers(),4000);const physical=list.filter(p=>!/(pdf|onenote|fax|xps)/i.test(p.name));if(physical.length===1){settings.print.clientPrinter=physical[0].name;settings.print.kitchenPrinter=physical[0].name;store.put('settings',JSON.stringify(settings));}}catch{/* Printer discovery must not prevent offline sales. */}}
   await mainWindow.loadFile(path.join(__dirname,'..','frontend','index.html'));
-  if(process.env.POS_SMOKE_OUTPUT){const ready=await Promise.race([rendererReady,new Promise((_,reject)=>setTimeout(()=>reject(new Error('La fenêtre n’a pas contacté le moteur de caisse.')),10000))]);fs.writeFileSync(process.env.POS_SMOKE_OUTPUT,JSON.stringify({ready,version:app.getVersion(),printers:(await printers()).map(p=>({name:p.name,status:p.status})),selectedPrinter:service.settings().print.clientPrinter,vfdPorts:await vfd.ports(),vfdEnabled:service.settings().vfd.enabled}));store.db.close();return app.quit();}
+  if(process.env.POS_SMOKE_OUTPUT){try{const ready=await within(rendererReady,15000);fs.writeFileSync(process.env.POS_SMOKE_OUTPUT,JSON.stringify({ready,version:app.getVersion(),printers:(await within(printers(),4000).catch(()=>[])).map(p=>({name:p.name,status:p.status})),selectedPrinter:service.settings().print.clientPrinter,vfdPorts:await within(vfd.ports(),4000).catch(()=>[]),vfdEnabled:service.settings().vfd.enabled}));}catch(error){fs.writeFileSync(process.env.POS_SMOKE_OUTPUT,JSON.stringify({error:error.message,version:app.getVersion()}));}store.db.close();return app.quit();}
   engine.start();void runPrintJobs();
 });
 app.on('window-all-closed',()=>app.quit());app.on('before-quit',()=>{engine?.stop();serialTransport?.stop();});

@@ -6,7 +6,7 @@ import {buildReport,reportFilters} from './reporting.mjs';
 export const PERMISSIONS = ['suppliers','sell','discount','void','catalog','clients','expenses','reports','close','users','settings','sync','backup'];
 export const DEFAULT_SETTINGS = {
   company: { name: 'Mon établissement', address: '', phone: '', taxId: '', footer: 'Merci pour votre visite !' },
-  print: { clientPrinter: '', kitchenPrinter: '', autoPrint: true, kitchen: true, closure: true, clientComments: false, kitchenComments: true, showClient: true, showLogo: false, logo: '', copies: 1 },
+  print: { clientPrinter: '', kitchenPrinter: '', drawerPrinter: '', drawerEnabled: true, drawerPin: 2, autoPrint: true, kitchen: true, closure: true, clientComments: false, kitchenComments: true, showClient: true, showLogo: false, logo: '', copies: 1 },
   maxDiscountPercent: 20, varianceThreshold: 5000,
   vfd: VFD_DEFAULTS,
   sync: { enabled: false, endpoint: '', intervalMinutes: 20 },
@@ -80,6 +80,7 @@ export class PosService {
       sync:()=>{this.require(user,'sync');ensure(this.options.sync,'Synchronisation indisponible.');return this.options.sync.run();},
       resolveConflict:()=>{this.require(user,'sync');return this.options.sync.resolve(args);},
       printers:()=>{this.require(user,'settings');return this.options.printers?.() || [];},
+      testDrawer:()=>{this.require(user,'settings');ensure(this.options.testDrawer,'Tiroir disponible uniquement dans l’application bureau.');return this.options.testDrawer();},
       previewReceipt:()=>this.options.receipt?.(this.saleDetails(args.id,user), args.kind || 'client', this.settings()),
       printSale:()=>{this.require(user,'sell');const sale=this.saleDetails(args.id,user);void this.options.vfd?.total(this.settings().vfd,sale);return this.options.printSale?.(sale,args.kind);},
       printReport:()=>{this.require(user,'reports');const settings={...this.settings(),filterNames:Object.fromEntries(this.db.prepare('SELECT id,data FROM entities').all().map(r=>[r.id,parse(r.data).name]).concat(this.db.prepare('SELECT id,name FROM users').all().map(r=>[r.id,r.name])))};return this.options.printReport?.(this.report(args),settings);},
@@ -115,7 +116,7 @@ export class PosService {
     const settings=this.settings();const allowed = p=>user.admin||user.permissions.includes(p);
     const session=this.currentSession(user);
     const sales=this.db.prepare(`SELECT * FROM sales ${allowed('reports')?'':'WHERE user_id=?'} ORDER BY created_at DESC LIMIT 100`).all(...(allowed('reports')?[]:[user.id])).map(r=>({...parse(r.data),voidedAt:r.voided_at,voidReason:r.void_reason}));
-    return { user, settings, vfd:this.options.vfd?.status()||{connected:false,lines:['','']}, deviceId:this.get('deviceId'), testMode:!!this.options.testMode,
+    return { user, settings, drawerError:allowed('settings')?this.get('drawerLastError')||'':'', vfd:this.options.vfd?.status()||{connected:false,lines:['','']}, deviceId:this.get('deviceId'), testMode:!!this.options.testMode,
       catalog:Object.fromEntries(['family','product','supplement','comment','expenseCategory','client','supplier'].map(kind=>[kind,this.entities(kind)])),
       session, cash:session ? this.cashSummary(session.id):null, sales,
       expenses:allowed('expenses')?this.db.prepare('SELECT * FROM expenses ORDER BY created_at DESC LIMIT 100').all().map(r=>({...parse(r.data),id:r.id,amount:r.amount,source:r.source,createdAt:r.created_at,day:r.day})):[],
@@ -287,7 +288,8 @@ export class PosService {
   saveSettings(args,user) {
     const current=this.settings();const company={name:label(args.company?.name,'Établissement'),address:text(args.company?.address,300),phone:text(args.company?.phone,40),taxId:text(args.company?.taxId,60),footer:text(args.company?.footer,300)};
     const p=args.print||{};ensure(!p.logo||/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(p.logo)&&p.logo.length<500000,'Logo invalide ou trop volumineux.');
-    const print={clientPrinter:text(p.clientPrinter,200),kitchenPrinter:text(p.kitchenPrinter,200),autoPrint:!!p.autoPrint,kitchen:p.kitchen!==false,closure:p.closure!==false,clientComments:!!p.clientComments,kitchenComments:p.kitchenComments!==false,showClient:p.showClient!==false,showLogo:!!p.showLogo,logo:p.logo||'',copies:integer(p.copies||1,'Copies',1,2)};
+    const drawerPin=Number(p.drawerPin??2);ensure([2,5].includes(drawerPin),'Connecteur de tiroir invalide.');
+    const print={clientPrinter:text(p.clientPrinter,200),kitchenPrinter:text(p.kitchenPrinter,200),drawerPrinter:text(p.drawerPrinter,200),drawerEnabled:p.drawerEnabled!==false,drawerPin,autoPrint:!!p.autoPrint,kitchen:p.kitchen!==false,closure:p.closure!==false,clientComments:!!p.clientComments,kitchenComments:p.kitchenComments!==false,showClient:p.showClient!==false,showLogo:!!p.showLogo,logo:p.logo||'',copies:integer(p.copies||1,'Copies',1,2)};
     const maxDiscountPercent=integer(args.maxDiscountPercent,'Plafond de remise',0,100),varianceThreshold=integer(args.varianceThreshold,'Seuil d’écart');
     const sync={enabled:!!args.sync?.enabled,endpoint:text(args.sync?.endpoint,500).replace(/\/$/,''),intervalMinutes:20};
     if(sync.endpoint){const url=new URL(sync.endpoint);ensure(url.protocol==='https:'||(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)),'Utilisez une adresse HTTPS pour la synchronisation.');}
