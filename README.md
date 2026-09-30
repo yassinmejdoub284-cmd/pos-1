@@ -10,7 +10,7 @@ Application Windows de caisse avec base locale SQLite et service de synchronisat
 
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.3.0 : application bureau, serveur de synchronisation, captures et 45 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.3.1 : application bureau, serveur de synchronisation, captures et 46 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -22,13 +22,13 @@ npm test
 npm run build
 ```
 
-L’exécutable est créé dans `release/Samurai-POS-0.3.0.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
+L’exécutable est créé dans `release/Samurai-POS-0.3.1.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
 
 ![Afficheur VFD : exemple de total](captures/afficheur-total-v03.png)
 
 ## Démarrer sur Windows
 
-1. Ouvrir `release/Samurai-POS-0.3.0.exe`.
+1. Ouvrir `release/Samurai-POS-0.3.1.exe`.
 2. Au premier lancement, créer l’établissement, le compte administrateur et son code personnel. Aucun code de production n’est préinstallé.
 3. Créer les familles, produits, suppléments, commentaires et catégories de charges dans le catalogue.
 4. Dans **Catalogue → Organiser l’affichage**, sélectionner un produit, cliquer sur sa nouvelle place et enregistrer. Les pages de caisse contiennent 12 produits, sauf la dernière si le catalogue n’est pas un multiple de 12. Les filtres conservent l’ordre choisi.
@@ -83,11 +83,11 @@ L’impression utilise le pilote Windows, sans modifier les composants OPOS exis
 
 **Paramètres → Sauvegarder la base** crée un fichier SQLite cohérent contenant les ventes et comptes. Le conserver sur un autre support. Le secret de synchronisation reste séparé et protégé par Windows. Pour restaurer une sauvegarde, fermer l’application et conserver une copie du dossier de données actuel avant de remplacer `samurai-pos.sqlite` par la sauvegarde. Ne pas remplacer une base pendant que l’application est ouverte.
 
-## Synchronisation toutes les 5 heures
+## Synchronisation toutes les 20 minutes
 
 Le serveur Internet n’est pas encore fourni. L’application fonctionne hors ligne pendant ce temps. Le service `backend/cloud.mjs` et le tableau de bord sont prêts pour leur hébergement.
 
-Les échanges ont lieu lorsque l’application bureau est **ouverte** : au démarrage si la dernière réussite date de plus de 5 heures, puis toutes les 5 heures après une réussite, avec une vérification chaque minute. Une erreur laisse les opérations en attente et entraîne de nouvelles tentatives après 5 minutes. Le bouton manuel est disponible.
+Les échanges ont lieu lorsque l’application bureau est **ouverte** : au démarrage si la dernière réussite date de plus de 20 minutes, puis toutes les 20 minutes après une réussite, avec une vérification chaque minute. Une erreur laisse les opérations en attente et entraîne de nouvelles tentatives après 5 minutes. Le bouton manuel est disponible.
 
 Les ventes, clôtures, charges et règlements sont consolidés en ligne. Le catalogue et les clients sont échangés entre les postes ; les conflits sont présentés à l’utilisateur. Les soldes clients sur le poste restent calculés à partir des ventes et règlements de ce poste : utiliser une seule caisse pour le crédit d’un même client. Les comptes, permissions, imprimantes et secrets restent propres au poste.
 
@@ -115,4 +115,4 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 
 ## État de livraison
 
-Version 0.3.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 45 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+Version 0.3.1 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 46 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.

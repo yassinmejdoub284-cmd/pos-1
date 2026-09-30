@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   print: { clientPrinter: '', kitchenPrinter: '', autoPrint: true, kitchen: true, closure: true, clientComments: false, kitchenComments: true, showClient: true, showLogo: false, logo: '', copies: 1 },
   maxDiscountPercent: 20, varianceThreshold: 5000,
   vfd: VFD_DEFAULTS,
-  sync: { enabled: false, endpoint: '', intervalHours: 5 },
+  sync: { enabled: false, endpoint: '', intervalMinutes: 20 },
 };
 const parse = value => JSON.parse(value);
 const now = () => new Date().toISOString();
@@ -63,6 +63,7 @@ export class PosService {
       sessionSummary:()=>{this.require(user,'sell');const s=this.sessionRequired(user);return this.cashSummary(s.id);},
       closeSession:()=>{this.require(user,'close');return this.closeSession(args,user);},
       sale:()=>{this.require(user,'sell');const sale=this.createSale(args,user);if(args.print??this.settings().print.autoPrint)void this.options.vfd?.total(this.settings().vfd,sale);return sale;},
+      saleByRequest:()=>{this.require(user,'sell');const requestId=label(args.requestId,'Identifiant de vente',100);const row=this.db.prepare('SELECT id FROM sales WHERE request_id=?').get(requestId);return row?this.saleDetails(row.id,user):null;},
       saleDetails:()=>this.saleDetails(args.id,user),
       voidSale:()=>{this.require(user,'void');return this.voidSale(args,user);},
       expense:()=>{this.require(user,'expenses');return this.createExpense(args,user);},
@@ -267,7 +268,7 @@ export class PosService {
     const p=args.print||{};ensure(!p.logo||/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(p.logo)&&p.logo.length<500000,'Logo invalide ou trop volumineux.');
     const print={clientPrinter:text(p.clientPrinter,200),kitchenPrinter:text(p.kitchenPrinter,200),autoPrint:!!p.autoPrint,kitchen:p.kitchen!==false,closure:p.closure!==false,clientComments:!!p.clientComments,kitchenComments:p.kitchenComments!==false,showClient:p.showClient!==false,showLogo:!!p.showLogo,logo:p.logo||'',copies:integer(p.copies||1,'Copies',1,2)};
     const maxDiscountPercent=integer(args.maxDiscountPercent,'Plafond de remise',0,100),varianceThreshold=integer(args.varianceThreshold,'Seuil d’écart');
-    const sync={enabled:!!args.sync?.enabled,endpoint:text(args.sync?.endpoint,500).replace(/\/$/,''),intervalHours:5};
+    const sync={enabled:!!args.sync?.enabled,endpoint:text(args.sync?.endpoint,500).replace(/\/$/,''),intervalMinutes:20};
     if(sync.endpoint){const url=new URL(sync.endpoint);ensure(url.protocol==='https:'||(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)),'Utilisez une adresse HTTPS pour la synchronisation.');}
     if(sync.enabled)ensure(sync.endpoint,'Adresse de synchronisation requise.');
     if(typeof args.syncToken==='string'&&args.syncToken.trim()){ensure(args.syncToken.length>=16&&args.syncToken.length<=500,'Clé de synchronisation invalide.');this.options.saveSyncToken?.(args.syncToken.trim());}

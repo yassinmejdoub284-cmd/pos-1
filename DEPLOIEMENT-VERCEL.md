@@ -57,7 +57,7 @@ Dans la caisse : **Paramètres → Synchronisation** :
 3. Clé : la valeur privée de `SYNC_TOKEN`.
 4. Enregistrer, puis ouvrir **Synchronisation → Synchroniser** pour le premier envoi.
 
-Le logiciel reste utilisable hors ligne. Tant qu’il est ouvert, il envoie toutes les 5 heures après la dernière réussite ; après une panne, les opérations restent en attente et les essais reprennent après 5 minutes. L’envoi manuel permet de transmettre immédiatement une clôture. Il n’est pas nécessaire de créer un cron Vercel : le PC déclenche les envois.
+Le logiciel reste utilisable hors ligne. Tant qu’il est ouvert, il envoie toutes les 20 minutes après la dernière réussite ; après une panne, les opérations restent en attente et les essais reprennent après 5 minutes. L’envoi manuel permet de transmettre immédiatement une clôture. Il n’est pas nécessaire de créer un cron Vercel : le PC déclenche les envois.
 
 Actualiser le suivi en ligne. Vérifier le nombre de tickets, les soldes clients et fournisseurs, une clôture, puis la date de réception dans **Synchronisations**. Les filtres famille/produit/paiement/service concernent les ventes ; les soldes portent sur tout l’historique reçu.
 

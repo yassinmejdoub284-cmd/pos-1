@@ -2,9 +2,9 @@
 
 ## Le fichier à remettre
 
-Remettre **Samurai-POS-0.3.0.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
+Remettre **Samurai-POS-0.3.1.exe** depuis le dossier `application/release`. C’est une application portable pour Windows 10/11 64 bits : aucun installateur Node.js, Git ou Electron n’est nécessaire sur le PC du client. Le fichier peut être transmis par clé USB. Le dépôt GitHub contient le code source ; il ne contient pas l’exécutable.
 
-Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.0.exe`.
+Sur le poste de développement, pour reconstruire le fichier : installer Node.js, ouvrir le dossier du code puis exécuter `npm ci` et `npm run build`. Le résultat se trouve dans `release/Samurai-POS-0.3.1.exe`.
 
 ## 1. Copier et démarrer
 
@@ -45,7 +45,7 @@ Utiliser le même compte Windows pour retrouver la même caisse. Dans **Paramèt
 
 ## 6. Activer le suivi en ligne
 
-Après configuration de Vercel, saisir son adresse et la clé dans **Paramètres → Synchronisation**. Effectuer le premier envoi manuellement. Ensuite laisser l’application ouverte : les envois automatiques se font toutes les 5 heures lorsqu’Internet est disponible. La caisse fonctionne toujours sans connexion.
+Après configuration de Vercel, saisir son adresse et la clé dans **Paramètres → Synchronisation**. Effectuer le premier envoi manuellement. Ensuite laisser l’application ouverte : les envois automatiques se font toutes les 20 minutes lorsqu’Internet est disponible. La caisse fonctionne toujours sans connexion.
 
 Voir `DEPLOIEMENT-VERCEL.md` pour le serveur. Les données envoyées comprennent les rapports de ventes, clôtures, fiches clients/fournisseurs, charges et règlements.
 

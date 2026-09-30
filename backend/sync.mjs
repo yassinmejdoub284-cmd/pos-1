@@ -52,6 +52,6 @@ export class SyncEngine {
     });
   }
   start(){this.timer=setInterval(()=>this.tick(),60000);this.timer.unref?.();void this.tick();}
-  async tick(){const s=this.service;if(!s.settings().sync.enabled||this.running)return;const success=Date.parse(s.get('syncLastSuccess')||0)||0,attempt=Date.parse(s.get('syncLastAttempt')||0)||0;if(Date.now()-success>=5*3600000&&Date.now()-attempt>=5*60000){try{await this.run();}catch{ /* Persisted in settings; retry without disrupting the cashier. */ }}}
+  async tick(){const s=this.service;if(!s.settings().sync.enabled||this.running)return;const success=Date.parse(s.get('syncLastSuccess')||0)||0,attempt=Date.parse(s.get('syncLastAttempt')||0)||0;if(Date.now()-success>=20*60000&&Date.now()-attempt>=5*60000){try{await this.run();}catch{ /* Persisted in settings; retry without disrupting the cashier. */ }}}
   stop(){clearInterval(this.timer);}
 }
