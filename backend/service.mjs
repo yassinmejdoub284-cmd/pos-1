@@ -231,8 +231,10 @@ export class PosService {
       const supplements=[...new Set(item.supplements||[])].map(id=>{const s=this.entity(id,'supplement');ensure(!s.productIds.length||s.productIds.includes(product.id),'Ce supplément ne correspond pas à ce produit.');return {id:s.id,name:s.name,price:s.price};});
       const comments=[...new Set(item.comments||[])].map(id=>{const c=this.entity(id,'comment');ensure(!c.productIds.length||c.productIds.includes(product.id),'Ce commentaire ne correspond pas à ce produit.');return {id:c.id,name:c.name,client:c.client,kitchen:c.kitchen};});
       ensure(supplements.length<=30&&comments.length<=30,'Trop d’options.');
+      ensure(item.kitchenNote===undefined||(typeof item.kitchenNote==='string'&&item.kitchenNote.length<=300),'Note cuisine invalide (maximum 300 caractères).');
+      const kitchenNote=text(item.kitchenNote,300);
       const unit=product.price+supplements.reduce((sum,s)=>sum+s.price,0);
-      return {lineId:randomUUID(),productId:product.id,name:product.name,kitchenName:product.kitchenName||product.name,familyId:product.familyId,familyName:this.entity(product.familyId,'family').name,quantity,price:product.price,supplements,comments,total:unit*quantity};
+      return {lineId:randomUUID(),productId:product.id,name:product.name,kitchenName:product.kitchenName||product.name,familyId:product.familyId,familyName:this.entity(product.familyId,'family').name,quantity,price:product.price,supplements,comments,kitchenNote,total:unit*quantity};
     });
     const subtotal=items.reduce((sum,item)=>sum+item.total,0);integer(subtotal,'Montant de commande',0,100_000_000);
     const discount=integer(args.discount||0,'Remise',0,subtotal);if(discount){this.require(user,'discount');ensure(discount<=Math.floor(subtotal*this.settings().maxDiscountPercent/100),'Remise supérieure au plafond autorisé.');}

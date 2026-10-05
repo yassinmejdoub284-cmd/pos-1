@@ -20,7 +20,7 @@ Sur mobile, les modules sont accessibles par un menu horizontal et les tableaux 
 
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 59 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 64 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -67,6 +67,12 @@ Dans **Paramètres → Réglages de caisse → Vider le stockage**, l'administra
 - Pour un client sélectionné, choisir Espèces, Carte ou Crédit dans la caisse avant de cliquer sur l’un des deux boutons. Les paiements par carte doivent avoir été acceptés sur le terminal bancaire.
 - F4 encaisse avec les deux impressions. Les boutons sont bloqués pendant l’enregistrement.
 - Le bouton ☰ en haut masque ou affiche le menu ; le choix est conservé sur le poste.
+
+## Note libre par produit pour la cuisine
+
+Dans Caisse, sélectionner une ligne de la commande puis écrire dans **Note cuisine**, sous les suppléments et commentaires. La note est facultative, limitée à 300 caractères et enregistrée dans le brouillon puis avec la vente. Deux lignes du même produit peuvent avoir des notes différentes. Changer de ligne affiche sa propre note ; vider le champ supprime la note de cette ligne avant encaissement.
+
+La note apparaît sous l’article uniquement dans le bon cuisine, y compris lors d’une réimpression. Elle ne figure jamais sur le ticket client et reste indépendante des commentaires prédéfinis et de la note générale de commande. Les montants et le stock ne changent pas. Les notes sont également conservées dans les données synchronisées. Pour en bénéficier dans l’application Windows, reconstruire et utiliser le nouvel EXE.
 
 ## Règlements et charges à crédit
 
@@ -137,4 +143,4 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 
 ## État de livraison
 
-Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 59 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 64 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.

@@ -23,7 +23,7 @@ const server=createServer(async(req,res)=>{
       let raw='',size=0;for await(const chunk of req){size+=chunk.length;if(size>2_000_000)throw new Error('Requête trop volumineuse.');raw+=chunk;}const {action,args,token}=JSON.parse(raw);return send(200,await service.call(action,args,token));
     }
     if(req.method==='GET'){
-      const name=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.mjs','ui.mjs','views.mjs','pagination.mjs','advanced.mjs','settlements.mjs','vfd.mjs','styles.css','theme.css'].includes(name))return send(404,{error:'Introuvable'});
+      const name=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.mjs','ui.mjs','views.mjs','pagination.mjs','advanced.mjs','settlements.mjs','stock.mjs','sale-recovery.mjs','vfd.mjs','styles.css','theme.css'].includes(name))return send(404,{error:'Introuvable'});
       const file=resolve(root,'frontend',name);if(!existsSync(file))return send(404,{error:'Introuvable'});res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});return res.end(readFileSync(file));
     }
     send(404,{error:'Introuvable'});

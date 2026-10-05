@@ -4,8 +4,10 @@ function sameOrder(previous, request) {
     quantity:line.quantity,
     supplements:line.supplements.map(item=>item.id),
     comments:line.comments.map(item=>item.id),
+    kitchenNote:(line.kitchenNote||'').trim(),
   }));
-  return JSON.stringify(items)===JSON.stringify(request.items)
+  const requested=request.items.map(line=>({productId:line.productId,quantity:line.quantity,supplements:line.supplements||[],comments:line.comments||[],kitchenNote:(line.kitchenNote||'').trim()}));
+  return JSON.stringify(items)===JSON.stringify(requested)
     && previous.discount===request.discount
     && previous.payment===request.payment
     && (previous.client?.id||'')===request.clientId;
