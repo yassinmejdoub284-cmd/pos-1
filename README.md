@@ -8,9 +8,19 @@ Application Windows de caisse avec base locale SQLite et service de synchronisat
 - [Configurer le suivi sur Vercel](DEPLOIEMENT-VERCEL.md) : construction web, PostgreSQL, variables privées et liaison avec la caisse.
 - La version en ligne propose Rapports, Clôtures, Clients, Fournisseurs, Charges, Règlements et Synchronisations. Le fichier Windows continue de fonctionner hors ligne.
 
+## Filtres et indicateurs du tableau de bord web
+
+Dans la version de suivi synchronisée, choisir une date de début et de fin, puis une plage horaire facultative. Les dates sont incluses, et les heures utilisent **Africa/Tunis**. La plage est répétée chaque jour ; la dernière minute est incluse en entier. Sans heure, toute la journée est retenue. Une plage de nuit telle que 22:00–02:00 couvre 00:00–02:00 et 22:00–23:59 sur chacune des dates sélectionnées, sans ajouter le lendemain de la dernière date. Un enregistrement sans heure connue est exclu d’une sélection horaire.
+
+Les raccourcis Aujourd’hui, Hier, 7 jours, 30 jours et Ce mois appliquent immédiatement les dates en conservant les autres critères saisis. Réinitialiser revient à aujourd’hui sans filtre. « Période appliquée » rappelle la sélection utilisée pour les résultats ; une saisie non appliquée ou une erreur ne modifie pas les indicateurs affichés.
+
+Le tableau de bord affiche ventes nettes, nombre de tickets, panier moyen, articles nets, ventes espèces/carte/crédit et charges. Il ajoute l’activité par heure, le pic de fréquentation (nombre de tickets), les remboursements, remises et règlements. Les totaux sont calculés sur tous les enregistrements de la sélection ; la recherche et la pagination des tickets portent sur les 200 derniers affichables. Les remboursements sont imputés à leur date et heure d’annulation, les clôtures à leur heure de fermeture. Dates et heures filtrent aussi charges et règlements ; les soldes clients/fournisseurs et le stock restent des états de l’historique complet reçu.
+
+Sur mobile, les modules sont accessibles par un menu horizontal et les tableaux deviennent des fiches avec libellés. Les thèmes clair/sombre, l’impression, la recherche de fiches et le détail des clôtures restent disponibles. Le dernier envoi reçu est visible dans l’en-tête de chaque module.
+
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 53 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 59 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -127,4 +137,4 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 
 ## État de livraison
 
-Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 53 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 59 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.

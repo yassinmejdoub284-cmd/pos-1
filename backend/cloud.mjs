@@ -63,7 +63,7 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
     try{
       const url=new URL(req.url,'http://localhost');
       if(req.method==='GET'&&url.pathname==='/health')return send(200,{ok:true,version:1});
-      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/styles.css','/theme.css','/online.css'].includes(url.pathname)){
+      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/dashboard-period.mjs','/styles.css','/theme.css','/online.css'].includes(url.pathname)){
         const path=url.pathname==='/'?'online.html':url.pathname==='/online.js'?'cloud-ui.mjs':url.pathname.slice(1);res.writeHead(200,{'Content-Type':path.endsWith('.html')?'text/html; charset=utf-8':(path.endsWith('.js')||path.endsWith('.mjs'))?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff'});return res.end(readFileSync(resolve(root,'frontend',path)));
       }
       let body={};if(req.method==='POST'){ensure(req.headers['content-type']?.startsWith('application/json'),'JSON requis.',415);let size=0,raw='';for await(const chunk of req){size+=chunk.length;ensure(size<=2_000_000,'Requête trop volumineuse.',413);raw+=chunk;}body=JSON.parse(raw);}

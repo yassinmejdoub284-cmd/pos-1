@@ -1,4 +1,4 @@
-import {buildReport,reportFilters} from './reporting.mjs';
+import {buildReport,reportFilters,inReportPeriod} from './reporting.mjs';
 import {dayInTunis} from './money.mjs';
 export function cloudData({records,entities,devices},args={}){
  const filters=reportFilters(args),all=type=>records.filter(r=>r.type===type).map(r=>({...r.payload,syncDeviceId:r.device||r.payload.deviceId||''}));
@@ -12,8 +12,7 @@ export function cloudData({records,entities,devices},args={}){
  for(const p of clientPayments)clientBalances[p.clientId]=(clientBalances[p.clientId]||0)-p.amount;
  for(const e of expenses)if(e.source==='credit'&&e.supplierId)supplierBalances[e.supplierId]=(supplierBalances[e.supplierId]||0)+e.amount;
  for(const p of supplierPayments)supplierBalances[p.supplierId]=(supplierBalances[p.supplierId]||0)-p.amount;
- const inPeriod=day=>day>=filters.from&&day<=filters.to;
- const closures=sessions.filter(s=>s.closedAt&&inPeriod(dayInTunis(new Date(s.closedAt)))&&(!filters.userId||s.userId===filters.userId)).sort((a,b)=>b.closedAt.localeCompare(a.closedAt));
+ const closures=sessions.filter(s=>s.closedAt&&inReportPeriod(filters,dayInTunis(new Date(s.closedAt)),s.closedAt)&&(!filters.userId||s.userId===filters.userId)).sort((a,b)=>b.closedAt.localeCompare(a.closedAt));
  const purchases={};for(const e of expenses)if(e.supplierId)purchases[e.supplierId]=(purchases[e.supplierId]||0)+e.amount;
  const productNames=new Map(catalog.product.map(p=>[p.id,p.name])),supplierNames=new Map(catalog.supplier.map(s=>[s.id,s.name]));
  const stock=all('stock').filter(s=>s.active).map(s=>({...s,productName:productNames.get(s.productId)||s.productId,supplierName:supplierNames.get(s.supplierId)||'',low:s.quantity<=s.minQuantity})).sort((a,b)=>a.productName.localeCompare(b.productName,'fr'));
