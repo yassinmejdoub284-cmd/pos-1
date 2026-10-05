@@ -10,7 +10,7 @@ Application Windows de caisse avec base locale SQLite et service de synchronisat
 
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.3.3 : application bureau, serveur de synchronisation, captures et 50 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 53 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -22,18 +22,24 @@ npm test
 npm run build
 ```
 
-L’exécutable est créé dans `release/Samurai-POS-0.3.3.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
+L’exécutable est créé dans `release/Samurai-POS-0.4.0.exe`. `npm start` lance l’application en développement ; `npm run preview` lance une démonstration séparée. GitHub Actions vérifie les tests sur Windows à chaque modification publiée.
 
 ![Afficheur VFD : exemple de total](captures/afficheur-total-v03.png)
 
 ## Démarrer sur Windows
 
-1. Ouvrir `release/Samurai-POS-0.3.3.exe`.
+1. Ouvrir `release/Samurai-POS-0.4.0.exe`.
 2. Au premier lancement, créer l’établissement, le compte administrateur et son code personnel. Aucun code de production n’est préinstallé.
 3. Créer les familles, produits, suppléments, commentaires et catégories de charges dans le catalogue.
 4. Dans **Catalogue → Organiser l’affichage**, sélectionner un produit, cliquer sur sa nouvelle place et enregistrer. Les pages de caisse contiennent 12 produits, sauf la dernière si le catalogue n’est pas un multiple de 12. Les filtres conservent l’ordre choisi.
 5. Dans **Paramètres → Imprimantes & tickets**, sélectionner les imprimantes client et cuisine. Sur ce poste, Windows détecte **Xprinter XP-80 / USB001**. Vérifier le papier 80 mm dans le pilote Windows. Si une seule imprimante physique est détectée et aucun choix enregistré, elle est sélectionnée au démarrage.
 6. Ouvrir une session avec son fond de caisse puis commencer les ventes.
+
+## Tickets et stock
+
+Le numéro visible des tickets client et cuisine commence à **#00001** pour chaque nouvelle session de caisse après clôture. Les ventes conservent un identifiant interne unique pour l'historique et la synchronisation ; les anciens tickets ne sont pas renumérotés.
+
+Dans **Stock**, activer le suivi des produits voulus, définir un seuil d'alerte et saisir les réceptions en choisissant le fournisseur. Chaque vente diminue la quantité suivie ; une annulation la rétablit. Une quantité insuffisante empêche l'encaissement de ce produit. Les produits dont le suivi est désactivé restent vendables normalement. Une correction manuelle exige un motif. Les dernières quantités par poste et fournisseur sont envoyées au tableau de bord en ligne lors de la synchronisation. Une réception ne crée ni charge ni dette fournisseur : enregistrer la facture séparément dans **Charges**.
 
 Le tiroir-caisse branché au port RJ11/RJ12 d'une imprimante ESC/POS peut recevoir une impulsion après **chaque impression de l'application** : ticket client, bon cuisine, clôture et rapport. Dans **Paramètres → Imprimantes & tickets**, choisir l'imprimante à laquelle le tiroir est branché (par défaut, celle du ticket client), sélectionner la broche 2 ou 5 et cliquer sur **Tester le tiroir**. Le signal est envoyé comme une tâche d'impression Windows de type RAW avec la commande ESC/POS `ESC p`. Si le pilote refuse cette commande, le ticket reste enregistré et imprimé ; un message apparaît dans les paramètres pour faciliter le diagnostic.
 
@@ -121,4 +127,4 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 
 ## État de livraison
 
-Version 0.3.3 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 50 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 53 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.

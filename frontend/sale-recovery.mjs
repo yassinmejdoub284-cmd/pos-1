@@ -19,6 +19,6 @@ export async function submitSaleWithRecovery(request,{submit,find,newRequestId})
     if(!previous)throw error;
     if(sameOrder(previous,request))return {sale:{...previous,duplicate:true},previousTicket:null};
     const requestId=newRequestId();
-    return {sale:await submit({...request,requestId}),previousTicket:previous.ticket};
+    return {sale:await submit({...request,requestId}),previousTicket:previous.displayTicket??previous.ticket};
   }
 }

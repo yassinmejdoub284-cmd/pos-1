@@ -9,7 +9,7 @@ export function createHandler({env=process.env,getCloud=()=>cloud||=(new Postgre
  try{
  const url=new URL(req.url,'http://localhost'),route=(url.searchParams.get('route')||url.pathname.replace(/^\/api\/cloud\/?/,'')).replace(/^\//,'');
  const missing=[];if(!(env.DATABASE_URL||env.POSTGRES_URL))missing.push('DATABASE_URL');if(!env.SYNC_TOKEN||env.SYNC_TOKEN.length<24)missing.push('SYNC_TOKEN');if(!env.ADMIN_PASSWORD||env.ADMIN_PASSWORD.length<12)missing.push('ADMIN_PASSWORD');
- if(route==='health'&&req.method==='GET'){if(missing.length)return send(503,{ok:false,configured:false,missing});await getCloud().initialize();return send(200,{ok:true,configured:true,storage:'postgresql',version:'0.3.3'});}
+ if(route==='health'&&req.method==='GET'){if(missing.length)return send(503,{ok:false,configured:false,missing});await getCloud().initialize();return send(200,{ok:true,configured:true,storage:'postgresql',version:'0.4.0'});}
  ensure(!missing.length,'Configurez dans Vercel : '+missing.join(', ')+'.',503);
  let body={};if(req.method==='POST'){ensure(req.headers['content-type']?.startsWith('application/json'),'JSON requis.',415);if(req.body!==undefined){ensure(Buffer.byteLength(typeof req.body==='string'?req.body:JSON.stringify(req.body))<=2_000_000,'Requête trop volumineuse.',413);body=typeof req.body==='string'?JSON.parse(req.body):req.body;}else{let raw='',size=0;for await(const chunk of req){size+=chunk.length;ensure(size<=2_000_000,'Requête trop volumineuse.',413);raw+=chunk;}body=JSON.parse(raw);}}
  ensure(body&&typeof body==='object'&&!Array.isArray(body),'Requête JSON invalide.');

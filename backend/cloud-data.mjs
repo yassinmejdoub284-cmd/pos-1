@@ -15,5 +15,7 @@ export function cloudData({records,entities,devices},args={}){
  const inPeriod=day=>day>=filters.from&&day<=filters.to;
  const closures=sessions.filter(s=>s.closedAt&&inPeriod(dayInTunis(new Date(s.closedAt)))&&(!filters.userId||s.userId===filters.userId)).sort((a,b)=>b.closedAt.localeCompare(a.closedAt));
  const purchases={};for(const e of expenses)if(e.supplierId)purchases[e.supplierId]=(purchases[e.supplierId]||0)+e.amount;
- return {company:all('company')[0]||{name:'Samurai POS'},report:{...report,sales:report.sales.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,200),refunds:report.refunds.slice(0,200)},catalog,clientBalances,supplierBalances,purchases,closures:closures.slice(0,300),closureCount:closures.length,devices,updatedAt:new Date().toISOString(),users:[...new Map(sales.map(s=>[s.userId,{id:s.userId,name:s.userName}])).values()]};
+ const productNames=new Map(catalog.product.map(p=>[p.id,p.name])),supplierNames=new Map(catalog.supplier.map(s=>[s.id,s.name]));
+ const stock=all('stock').filter(s=>s.active).map(s=>({...s,productName:productNames.get(s.productId)||s.productId,supplierName:supplierNames.get(s.supplierId)||'',low:s.quantity<=s.minQuantity})).sort((a,b)=>a.productName.localeCompare(b.productName,'fr'));
+ return {company:all('company')[0]||{name:'Samurai POS'},report:{...report,sales:report.sales.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,200),refunds:report.refunds.slice(0,200)},catalog,clientBalances,supplierBalances,purchases,stock,closures:closures.slice(0,300),closureCount:closures.length,devices,updatedAt:new Date().toISOString(),users:[...new Map(sales.map(s=>[s.userId,{id:s.userId,name:s.userName}])).values()]};
 }

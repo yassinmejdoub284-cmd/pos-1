@@ -1,6 +1,6 @@
 # Déployer le suivi en ligne sur Vercel
 
-Le PC Windows garde les ventes dans sa base locale. Vercel reçoit les synchronisations et affiche les rapports, clôtures, clients, fournisseurs, charges, règlements et dernières réceptions par poste. Le tableau de bord consulte les données reçues ; il ne remplace pas la caisse Windows.
+Le PC Windows garde les ventes et le stock dans sa base locale. Vercel reçoit les synchronisations et affiche les rapports, clôtures, clients, fournisseurs, charges, règlements, derniers états du stock par poste et dernières réceptions. Le tableau de bord consulte les données reçues ; il ne remplace pas la caisse Windows.
 
 ## 1. Connecter le dépôt
 
