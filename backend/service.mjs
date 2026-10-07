@@ -60,7 +60,7 @@ export class PosService {
       bootstrap:()=>this.bootstrap(user),
       saveEntity:()=>{this.require(user,args.kind==='material'?'stock':args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.saveEntity(args,user);},
       reorderProducts:()=>{this.require(user,'catalog');return this.reorderProducts(args,user);},
-      archiveEntity:()=>{this.require(user,args.kind==='material'?'stock':args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.archiveEntity(args,user);},
+      archiveEntity:()=>{const kind=args.kind||(typeof args.id==='string'?this.db.prepare('SELECT kind FROM entities WHERE id=?').get(args.id)?.kind:undefined);this.require(user,kind==='material'?'stock':kind==='supplier'?'suppliers':kind==='client'?'clients':kind==='expenseCategory'?'expenses':'catalog');return this.archiveEntity({...args,kind},user);},
       saveRecipe:()=>{this.require(user,'stock');return this.materials.saveRecipe(args,user);},
       materialPurchase:()=>{this.require(user,'stock');return this.materials.purchase(args,user);},
       configureStock:()=>{this.require(user,'stock');return this.configureStock(args,user);},
