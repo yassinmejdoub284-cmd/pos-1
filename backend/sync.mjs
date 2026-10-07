@@ -8,7 +8,8 @@ export class SyncEngine {
     try {
       let sent=0;
       for(let batch=0;batch<100;batch++) {
-        const events=s.db.prepare("SELECT * FROM outbox WHERE state='pending' ORDER BY seq LIMIT 200").all().map(r=>({id:r.id,seq:r.seq,type:r.type,payload:JSON.parse(r.payload)}));
+        const events=[];let bytes=256;
+        for(const r of s.db.prepare("SELECT * FROM outbox WHERE state='pending' ORDER BY seq LIMIT 200").all()){const event={id:r.id,seq:r.seq,type:r.type,payload:JSON.parse(r.payload)},size=Buffer.byteLength(JSON.stringify(event),'utf8')+1;ensure(size+256<=1_800_000,'Opération trop volumineuse pour la synchronisation.');if(events.length&&bytes+size>1_800_000)break;events.push(event);bytes+=size;}
         const response=await this.fetcher(`${config.endpoint}/sync`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({deviceId:s.get('deviceId'),cursor:Number(s.get('syncCursor')||0),events}),signal:AbortSignal.timeout(30000)});
         ensure(response.ok,`Serveur de synchronisation : ${response.status}.`);const data=await response.json();
         ensure(Array.isArray(data.results)&&Array.isArray(data.changes)&&Number.isSafeInteger(data.cursor),'Réponse de synchronisation invalide.');
@@ -38,7 +39,7 @@ export class SyncEngine {
           }
           s.put('syncCursor',data.cursor);s.put('syncLastSuccess',new Date().toISOString());s.put('syncLastError','');
         });
-        if(events.length<200 && !data.hasMore)break;
+        if(!s.db.prepare("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1").get()&&!data.hasMore)break;
       }
       return {ok:true,sent};
     }catch(error){s.put('syncLastError',error.message);throw error;}finally{this.running=false;}

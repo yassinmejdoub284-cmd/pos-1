@@ -2,6 +2,7 @@ import { randomUUID, randomBytes, pbkdf2Sync, timingSafeEqual, createHash } from
 import { ensure, integer, label, dayInTunis, PosError } from './money.mjs';
 import {VFD_DEFAULTS,validateVfd,vfdMoney} from './vfd.mjs';
 import {buildReport,reportFilters} from './reporting.mjs';
+import {MaterialInventory} from './materials.mjs';
 
 export const PERMISSIONS = ['suppliers','stock','sell','discount','void','catalog','clients','expenses','reports','close','users','settings','sync','backup'];
 export const DEFAULT_SETTINGS = {
@@ -20,7 +21,7 @@ const CLEAR_LOCAL_CODE_HASH = '4cd20be3170338a51a08f4259a1e13a1fd0116d74ff7811da
 
 export class PosService {
   constructor(store, options={}) {
-    Object.assign(this, store); this.tokens = new Map(); this.attempts = new Map(); this.options = options;
+    Object.assign(this, store); this.materials=new MaterialInventory(this); this.tokens = new Map(); this.attempts = new Map(); this.options = options;
     if (!this.get('settings')) this.put('settings', JSON.stringify(DEFAULT_SETTINGS));
     if(!this.get('defaultsV2')){const settings=this.settings();settings.print={...DEFAULT_SETTINGS.print,...settings.print,autoPrint:true,kitchen:true,closure:true};this.put('settings',JSON.stringify(settings));this.put('defaultsV2','1');}
   }
@@ -28,7 +29,7 @@ export class PosService {
   audit(user, action, data={}) { this.db.prepare('INSERT INTO audit VALUES (?,?,?,?,?)').run(randomUUID(), user?.id || null, action, JSON.stringify(data), now()); }
   emit(type, payload) {
     const seq = Number(this.get('outboxSeq')) + 1; this.put('outboxSeq', seq);
-    if (type === 'entity'||type==='stock') this.db.prepare("UPDATE outbox SET state='superseded' WHERE type=? AND state='pending' AND json_extract(payload,'$.id')=?").run(type,payload.id);
+    if (type === 'entity'||type==='stock'||type==='materialStock') this.db.prepare("UPDATE outbox SET state='superseded' WHERE type=? AND state='pending' AND json_extract(payload,'$.id')=?").run(type,payload.id);
     this.db.prepare('INSERT INTO outbox(id,seq,type,payload,created_at) VALUES (?,?,?,?,?)').run(randomUUID(),seq,type,JSON.stringify(payload),now());
   }
   user(token) {
@@ -57,9 +58,11 @@ export class PosService {
     const user=this.user(token);
     const actions = {
       bootstrap:()=>this.bootstrap(user),
-      saveEntity:()=>{this.require(user,args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.saveEntity(args,user);},
+      saveEntity:()=>{this.require(user,args.kind==='material'?'stock':args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.saveEntity(args,user);},
       reorderProducts:()=>{this.require(user,'catalog');return this.reorderProducts(args,user);},
-      archiveEntity:()=>{this.require(user,args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.archiveEntity(args,user);},
+      archiveEntity:()=>{this.require(user,args.kind==='material'?'stock':args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.archiveEntity(args,user);},
+      saveRecipe:()=>{this.require(user,'stock');return this.materials.saveRecipe(args,user);},
+      materialPurchase:()=>{this.require(user,'stock');return this.materials.purchase(args,user);},
       configureStock:()=>{this.require(user,'stock');return this.configureStock(args,user);},
       stockMovement:()=>{this.require(user,'stock');return this.stockMovement(args,user);},
       openSession:()=>{this.require(user,'sell');return this.openSession(args,user);},
@@ -119,7 +122,7 @@ export class PosService {
     const session=this.currentSession(user);
     const sales=this.db.prepare(`SELECT * FROM sales ${allowed('reports')?'':'WHERE user_id=?'} ORDER BY created_at DESC LIMIT 100`).all(...(allowed('reports')?[]:[user.id])).map(r=>({...parse(r.data),voidedAt:r.voided_at,voidReason:r.void_reason}));
     return { user, settings, drawerError:allowed('settings')?this.get('drawerLastError')||'':'', vfd:this.options.vfd?.status()||{connected:false,lines:['','']}, deviceId:this.get('deviceId'), testMode:!!this.options.testMode,
-      catalog:Object.fromEntries(['family','product','supplement','comment','expenseCategory','client','supplier'].map(kind=>[kind,this.entities(kind)])),
+      catalog:Object.fromEntries(['family','product','supplement','comment','expenseCategory','client','supplier','material'].map(kind=>[kind,this.entities(kind)])),
       session, cash:session ? this.cashSummary(session.id):null, sales,
       expenses:allowed('expenses')?this.db.prepare('SELECT * FROM expenses ORDER BY created_at DESC LIMIT 100').all().map(r=>({...parse(r.data),id:r.id,amount:r.amount,source:r.source,createdAt:r.created_at,day:r.day})):[],
       users:allowed('users')?this.db.prepare('SELECT * FROM users ORDER BY name').all().map(safeUser):[],
@@ -129,6 +132,8 @@ export class PosService {
       clientPayments:allowed('clients')?this.db.prepare('SELECT p.*,e.data client,u.name userName FROM client_payments p JOIN entities e ON p.client_id=e.id JOIN users u ON p.user_id=u.id ORDER BY p.created_at DESC LIMIT 100').all().map(r=>({id:r.id,clientId:r.client_id,clientName:parse(r.client).name,userName:r.userName,amount:r.amount,method:r.method,createdAt:r.created_at})):[],
       supplierBalances:allowed('suppliers')||allowed('expenses')?this.supplierBalances():{},
       supplierPayments:allowed('suppliers')?this.db.prepare('SELECT data FROM supplier_payments ORDER BY created_at DESC LIMIT 100').all().map(r=>parse(r.data)):[],
+      materials:allowed('stock')?this.materials.snapshot():[],
+      materialPurchases:allowed('stock')?this.db.prepare('SELECT data FROM material_purchases ORDER BY created_at DESC LIMIT 100').all().map(r=>parse(r.data)):[],
       stock:allowed('stock')?this.stockSnapshot():[],
       stockMovements:allowed('stock')?this.db.prepare('SELECT m.*,p.data product,s.data supplier FROM stock_movements m JOIN entities p ON p.id=m.product_id LEFT JOIN entities s ON s.id=m.supplier_id ORDER BY m.created_at DESC LIMIT 100').all().map(r=>({id:r.id,productId:r.product_id,productName:parse(r.product).name,supplierId:r.supplier_id,supplierName:r.supplier?parse(r.supplier).name:'',kind:r.kind,quantity:r.quantity,before:r.before_quantity,after:r.after_quantity,unitCost:r.unit_cost,note:r.note,createdAt:r.created_at})):[],
       sync:allowed('sync')?{pending:this.db.prepare("SELECT COUNT(*) n FROM outbox WHERE state='pending'").get().n,lastSuccess:this.get('syncLastSuccess')||null,error:this.get('syncLastError')||null,conflicts:this.db.prepare('SELECT * FROM sync_conflicts').all().map(r=>({...parse(r.data),id:r.id})),running:!!this.options.sync?.running}:null,
@@ -140,7 +145,7 @@ export class PosService {
     };
   }
   saveEntity(args,user) {
-    ensure(['family','product','supplement','comment','expenseCategory','client','supplier'].includes(args.kind),'Type invalide.');
+    ensure(['family','product','supplement','comment','expenseCategory','client','supplier','material'].includes(args.kind),'Type invalide.');
     const {kind}=args;const data={name:label(args.data?.name),color:text(args.data?.color,20)||'#4f46e5'};
     ensure(/^#[0-9a-f]{6}$/i.test(data.color),'Couleur invalide.');
     if(kind==='product') {data.familyId=this.entity(args.data.familyId,'family').id;data.price=integer(args.data.price,'Prix',0);data.kitchenName=text(args.data.kitchenName,120);data.sku=text(args.data.sku,60);data.emoji=text(args.data.emoji,8)||'◉';}
@@ -149,11 +154,13 @@ export class PosService {
     if(kind==='supplier'){Object.assign(data,{contact:text(args.data.contact,120),phone:text(args.data.phone,40),email:text(args.data.email,150),address:text(args.data.address,300),taxId:text(args.data.taxId,60),notes:text(args.data.notes,500)});ensure(!data.email||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email),'Adresse e-mail invalide.');}
     if(kind==='client') {data.phone=text(args.data.phone,40);data.address=text(args.data.address,300);data.creditLimit=integer(args.data.creditLimit||0,'Plafond de crédit');}
     const id=args.id||randomUUID();const previous=this.db.prepare('SELECT * FROM entities WHERE id=?').get(id);
+    if(kind==='material'){ensure(['g','piece'].includes(args.data?.unit),'Unité matière invalide.');data.unit=args.data.unit;if(previous)ensure(parse(previous.data).unit===data.unit,'L’unité d’une matière ne peut pas être modifiée.');}
+    if(previous&&['product','supplement'].includes(kind)){const old=parse(previous.data);if(old.recipeConfigured){data.recipeConfigured=true;data.recipe=old.recipe||[];}}
     if(kind==='product')data.sortOrder=previous?parse(previous.data).sortOrder??this.entities('product').findIndex(p=>p.id===id):Math.max(-1,...this.entities('product').map(p=>p.sortOrder??0))+1;
     ensure(!previous||previous.kind===kind,'Type de fiche incorrect.');
     return this.transaction(()=>{
       const revision=previous?.revision||0;this.db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,active=1').run(id,kind,JSON.stringify(data),revision,1);
-      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});this.audit(user,'entity.save',{id,kind});return {...data,id,active:true,revision};
+      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});if(kind==='material')this.materials.emit(id);this.audit(user,'entity.save',{id,kind});return {...data,id,active:true,revision};
     });
   }
   reorderProducts(args,user) {
@@ -163,11 +170,12 @@ export class PosService {
   }
   archiveEntity(args,user) {
     const entity=this.entity(args.id,args.kind);
+    if(args.kind==='material'){ensure(!['product','supplement'].some(kind=>this.entities(kind).some(p=>p.active&&(p.recipe||[]).some(i=>i.materialId===entity.id))),'Retirez cette matière des recettes avant de la désactiver.');ensure(!this.materials.row(entity.id)?.quantity,'Le stock de cette matière doit être vide avant sa désactivation.');}
     if(args.kind==='family') ensure(!this.entities('product').some(p=>p.active&&p.familyId===args.id),'Déplacez ou désactivez les produits de cette famille avant de la désactiver.');
     if(args.kind==='client') ensure((this.clientBalances()[args.id]||0)===0,'Ce client a encore un solde à régler.');
     if(args.kind==='supplier') ensure((this.supplierBalances()[args.id]||0)===0,'Ce fournisseur a encore un solde à régler.');
     if(args.kind==='product') ensure(!this.db.prepare('SELECT 1 FROM stock_items WHERE product_id=? AND quantity>0').get(args.id),'Ce produit possède encore du stock. Ajustez-le à zéro avant de le désactiver.');
-    return this.transaction(()=>{this.db.prepare('UPDATE entities SET active=0 WHERE id=?').run(args.id);const {id,kind,revision,active,...data}=entity;this.emit('entity',{id,kind,data,active:false,baseRevision:revision});this.audit(user,'entity.archive',{id,kind});return {ok:true};});
+    return this.transaction(()=>{this.db.prepare('UPDATE entities SET active=0 WHERE id=?').run(args.id);const {id,kind,revision,active,...data}=entity;this.emit('entity',{id,kind,data,active:false,baseRevision:revision});if(kind==='material')this.materials.emit(id);this.audit(user,'entity.archive',{id,kind});return {ok:true};});
   }
   openSession(args,user) {
     const opening=integer(args.opening,'Fond de caisse');ensure(!this.currentSession(user),'Votre session est déjà ouverte.');
@@ -244,7 +252,10 @@ export class PosService {
     const received=args.payment==='cash'?integer(args.received,'Montant reçu',total,100_000_000):total;
     return this.transaction(()=>{
       const ticket=Number(this.get('ticket'))+1;this.put('ticket',ticket);const displayTicket=this.db.prepare('SELECT COUNT(*) n FROM sales WHERE session_id=?').get(session.id).n+1;const id=randomUUID(),createdAt=now();
-      const sale={id,requestId,inputHash,ticket,displayTicket,deviceId:this.get('deviceId'),sessionId:session.id,userId:user.id,userName:user.name,createdAt,day:dayInTunis(),items,subtotal,discount,total,payment:args.payment,received,change:received-total,client:client?{id:client.id,name:client.name,phone:client.phone}:null,mode:['sur_place','emporter','livraison'].includes(args.mode)?args.mode:'sur_place',note:text(args.note,300)};
+      this.materials.consume(items,id,user,createdAt);
+      const costComplete=items.every(i=>i.costing.complete),knownCost=items.reduce((n,i)=>n+i.knownCost,0);
+      const sale={costComplete,knownCost,cost:costComplete?knownCost:null,id,requestId,inputHash,ticket,displayTicket,deviceId:this.get('deviceId'),sessionId:session.id,userId:user.id,userName:user.name,createdAt,day:dayInTunis(),items,subtotal,discount,total,payment:args.payment,received,change:received-total,client:client?{id:client.id,name:client.name,phone:client.phone}:null,mode:['sur_place','emporter','livraison'].includes(args.mode)?args.mode:'sur_place',note:text(args.note,300)};
+      ensure(Buffer.byteLength(JSON.stringify(sale),'utf8')<=1_750_000,'Commande trop volumineuse. Répartissez les articles sur plusieurs tickets.');
       this.db.prepare('INSERT INTO sales(id,request_id,ticket,session_id,user_id,created_at,day,total,payment,client_id,data) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id,requestId,ticket,session.id,user.id,createdAt,sale.day,total,args.payment,client?.id||null,JSON.stringify(sale));
       for(const item of items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity-item.quantity;ensure(after>=0,`Stock insuffisant pour ${item.name} (${stock.quantity} disponible).`);this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,createdAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${id}:${item.lineId}`,item.productId,stock.supplier_id,'sale',-item.quantity,stock.quantity,after,0,'',id,user.id,createdAt);this.emitStock(item.productId);}
       this.emit('sale',sale);this.audit(user,'sale.create',{id,ticket,total});
@@ -258,7 +269,7 @@ export class PosService {
     const reason=label(args.reason,'Motif',300);ensure(reason.length>=5,'Précisez le motif d’annulation.');const row=this.db.prepare('SELECT * FROM sales WHERE id=?').get(args.id);ensure(row,'Vente introuvable.');ensure(!row.voided_at,'Cette vente est déjà annulée.');
     const session=this.sessionRequired(user);
     if(row.payment==='credit') ensure((this.clientBalances()[row.client_id]||0)>=row.total,'Ce crédit a déjà été réglé. Effectuez un remboursement après vérification du compte client.');
-    return this.transaction(()=>{const voidedAt=now();this.db.prepare('UPDATE sales SET voided_at=?,void_reason=?,void_session_id=? WHERE id=? AND voided_at IS NULL').run(voidedAt,reason,session.id,args.id);for(const item of parse(row.data).items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity+item.quantity;this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,voidedAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${row.id}:void:${item.lineId}`,item.productId,stock.supplier_id,'void',item.quantity,stock.quantity,after,0,reason,row.id,user.id,voidedAt);this.emitStock(item.productId);}this.emit('saleVoid',{id:args.id,voidedAt,reason,sessionId:session.id,userName:user.name});this.audit(user,'sale.void',{id:args.id,reason});return {ok:true};});
+    return this.transaction(()=>{const voidedAt=now();this.materials.restore(parse(row.data),user,voidedAt);this.db.prepare('UPDATE sales SET voided_at=?,void_reason=?,void_session_id=? WHERE id=? AND voided_at IS NULL').run(voidedAt,reason,session.id,args.id);for(const item of parse(row.data).items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity+item.quantity;this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,voidedAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${row.id}:void:${item.lineId}`,item.productId,stock.supplier_id,'void',item.quantity,stock.quantity,after,0,reason,row.id,user.id,voidedAt);this.emitStock(item.productId);}this.emit('saleVoid',{id:args.id,voidedAt,reason,sessionId:session.id,userName:user.name});this.audit(user,'sale.void',{id:args.id,reason});return {ok:true};});
   }
   createExpense(args,user) {
     const requestId=label(args.requestId,'Identifiant de charge',100);const prior=this.db.prepare('SELECT * FROM expenses WHERE request_id=?').get(requestId);
@@ -302,7 +313,7 @@ export class PosService {
       const sales=this.db.prepare('SELECT COUNT(*) n FROM sales').get().n;
       const closures=this.db.prepare('SELECT COUNT(*) n FROM sessions WHERE closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions)').get().n;
       for(const row of this.db.prepare("SELECT client_id,SUM(total) amount FROM sales WHERE payment='credit' AND voided_at IS NULL GROUP BY client_id").all())this.db.prepare('INSERT INTO client_opening_balances(client_id,amount) VALUES (?,?) ON CONFLICT(client_id) DO UPDATE SET amount=amount+excluded.amount').run(row.client_id,row.amount);
-      this.db.exec("DELETE FROM print_jobs; DELETE FROM closure_print_jobs; DELETE FROM stock_movements WHERE kind IN ('sale','void'); DELETE FROM sales; DELETE FROM outbox WHERE type IN ('sale','saleVoid','session'); DELETE FROM audit WHERE action IN ('sale.create','sale.void','session.open','session.close'); DELETE FROM purged_sessions;");
+      this.db.exec("DELETE FROM print_jobs; DELETE FROM closure_print_jobs; DELETE FROM stock_movements WHERE kind IN ('sale','void'); DELETE FROM material_movements WHERE kind IN ('sale','void'); DELETE FROM sales; DELETE FROM outbox WHERE type IN ('sale','saleVoid','session'); DELETE FROM audit WHERE action IN ('sale.create','sale.void','session.open','session.close'); DELETE FROM purged_sessions;");
       this.db.exec("DELETE FROM sessions WHERE id NOT IN (SELECT session_id FROM expenses WHERE session_id IS NOT NULL UNION SELECT session_id FROM client_payments UNION SELECT session_id FROM supplier_payments WHERE session_id IS NOT NULL);");
       this.db.exec("INSERT OR IGNORE INTO purged_sessions(id) SELECT id FROM sessions; UPDATE sessions SET opening=0,closing=NULL,expected=NULL,variance=NULL,data='{}' WHERE id IN (SELECT id FROM purged_sessions);");
       this.audit(user,'history.clear',{sales,closures,scope:'local'});

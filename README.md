@@ -20,7 +20,7 @@ Sur mobile, les modules sont accessibles par un menu horizontal et les tableaux 
 
 ## Construire depuis GitHub
 
-Ce dépôt contient la version 0.4.0 : application bureau, serveur de synchronisation, captures et 64 tests. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
+Ce dépôt contient la version 0.5.0 : application bureau, serveur de synchronisation et tests automatisés. Les bases de caisse, secrets, dépendances et exécutables générés ne sont pas versionnés.
 
 Sur Windows, installer Node.js 20 ou supérieur puis exécuter :
 
@@ -144,3 +144,17 @@ Dans le dossier de l’application : `npm ci`, puis `npm start`. `npm run previe
 ## État de livraison
 
 Version 0.4.0 : encaissement direct avec/sans impression, choix du paiement intégré, règlements clients/fournisseurs, charges à crédit et menu masquable. 64 tests automatisés passent. Les tests automatisés et le scénario navigateur caisse → ticket → synchronisation → tableau de bord ont été vérifiés. Le résultat papier réel, le lancement sur le poste de production et le déploiement HTTPS doivent encore être validés avant utilisation commerciale. Aucune garantie « zéro bug » n’est formulée. L’historique de l’ancienne caisse n’a pas été importé.
+
+## Matières premières consommées (desktop) et coûts (web uniquement)
+
+Dans **Matières premières**, ajouter les ingrédients en grammes ou en pièces, puis ouvrir **Recettes produits & suppléments**. « Ajouter matière première liée » définit les quantités pour une unité vendue : par exemple frites 100 g, œuf 1 pièce, thon 70 g. Configurer aussi chaque supplément. Une recette vide exige la confirmation « Cet article ne consomme aucune matière ». Modifier un produit dans Catalogue conserve sa recette.
+
+Dans **Achats**, sélectionner une matière, saisir la quantité en kg/g ou pièces et le montant total en DT. Chaque achat ajoute du stock et crée automatiquement une charge, avec le paiement caisse/banque ou la dette fournisseur. Ne pas enregistrer à nouveau cette facture dans Charges. Le paiement caisse nécessite une session ouverte ; le crédit nécessite un fournisseur. Les achats sont idempotents, y compris après perte de réponse.
+
+Dès qu’une matière première est active, toute nouvelle vente exige une recette configurée pour le produit et ses suppléments, ainsi qu’un stock matière suffisant. Chaque vente déduit les ingrédients et conserve leur coût au **coût unitaire moyen pondéré (CUMP)** du stock disponible. Les quantités sont calculées en millièmes de gramme/pièce et la valeur du stock avec une précision inférieure au millime ; les montants affichés sont arrondis en millimes. Les coûts des ventes restent figés après modification des achats ou recettes. Annuler un ticket remet ses quantités et leur valeur d’origine en stock. Vider l’historique local conserve les matières, recettes, achats, charges et stocks restants.
+
+Après synchronisation, **Rapports** dans la version web affiche le coût matière, la marge brute, le coût moyen par unité vendue et les matières consommées pour la période/heure/produit sélectionné. Dans les tickets, **Coûts & matières** détaille chaque ligne et ses suppléments, avec les quantités et coûts enregistrés au moment de la vente. **Matières premières** affiche les stocks et achats par poste. Les stocks restent propres à chaque caisse ; les recettes font partie du catalogue synchronisé. La marge brute est le montant après remises/remboursements moins le coût matière ; elle exclut les autres charges. Les achats ne sont pas soustraits une deuxième fois de cette marge. Les ventes anciennes sans coût enregistré sont signalées « À renseigner » et ne sont jamais considérées comme un coût nul. Les tableaux de tickets affichent jusqu’à 200 ventes récentes de la sélection ; réduire la période permet de consulter les détails des ventes plus anciennes. Les totaux et agrégats couvrent toute la sélection.
+
+Les coûts des produits et marges apparaissent **uniquement dans le tableau de bord web authentifié**. Les tickets client et cuisine ne comportent ni coût, ni marge, ni détail des matières. La **Note cuisine** est désormais un onglet à côté de Commentaires, ce qui rend la place aux produits. Elle reste propre à la ligne sélectionnée et s’imprime uniquement sur le bon cuisine.
+
+Sur GitHub, le workflow **POS tests** teste puis construit le portable Windows à chaque push sur main. L’exécutable est disponible dans l’artefact **Samurai-POS-Windows** du workflow. La version 0.5.0 réutilise la base locale existante et ajoute les nouvelles tables sans effacer le catalogue ni les ventes.

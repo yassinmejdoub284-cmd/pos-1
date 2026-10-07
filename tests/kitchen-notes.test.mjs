@@ -65,6 +65,6 @@ test('desktop : le pont IPC autorise vente avec note, reprise de vente et opéra
  let api;const calls=[];
  runInNewContext(readFileSync(new URL('../desktop/preload.cjs',import.meta.url),'utf8'),{require:()=>({contextBridge:{exposeInMainWorld:(name,value)=>api=value},ipcRenderer:{invoke:(...args)=>{calls.push(args);return Promise.resolve({ok:true});}}})});
  const args={items:[{productId:'p',kitchenNote:'Sauce à part'}]};await api.call('sale',args,'token');assert.equal(calls[0][2],args);
- for(const action of ['saleByRequest','configureStock','stockMovement','clearLocalHistory'])await api.call(action,{},'token');
- assert.equal(calls.length,5);await assert.rejects(api.call('unknown'),/Opération inconnue/);assert.equal(calls.length,5);
+ for(const action of ['saleByRequest','configureStock','stockMovement','saveRecipe','materialPurchase','clearLocalHistory'])await api.call(action,{},'token');
+ assert.equal(calls.length,7);await assert.rejects(api.call('unknown'),/Opération inconnue/);assert.equal(calls.length,7);
 });

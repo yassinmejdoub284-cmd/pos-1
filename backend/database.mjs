@@ -29,6 +29,10 @@ export function openDatabase(path) {
     CREATE TABLE IF NOT EXISTS stock_items (product_id TEXT PRIMARY KEY REFERENCES entities(id), supplier_id TEXT REFERENCES entities(id), quantity INTEGER NOT NULL DEFAULT 0, min_quantity INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS stock_movements (id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, product_id TEXT NOT NULL REFERENCES entities(id), supplier_id TEXT REFERENCES entities(id), kind TEXT NOT NULL, quantity INTEGER NOT NULL, before_quantity INTEGER NOT NULL, after_quantity INTEGER NOT NULL, unit_cost INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT '', sale_id TEXT, user_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS stock_movements_product_date ON stock_movements(product_id,created_at);
+    CREATE TABLE IF NOT EXISTS material_inventory(material_id TEXT PRIMARY KEY REFERENCES entities(id),quantity INTEGER NOT NULL DEFAULT 0,value_micros INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS material_purchases(id TEXT PRIMARY KEY,request_id TEXT NOT NULL UNIQUE,user_id TEXT NOT NULL REFERENCES users(id),data TEXT NOT NULL,created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS material_movements(id TEXT PRIMARY KEY,material_id TEXT NOT NULL REFERENCES entities(id),kind TEXT NOT NULL,quantity INTEGER NOT NULL,value_micros INTEGER NOT NULL,sale_id TEXT,data TEXT NOT NULL,created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS material_movements_date ON material_movements(created_at);
   `);
   const get = key => db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;
   const put = (key,value) => db.prepare('INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));

@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensure, integer, PosError, dayInTunis } from './money.mjs';
 import {cloudData} from './cloud-data.mjs';
+import {validateSync} from './cloud-validation.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const digest=value=>createHash('sha256').update(value).digest();
 const same=(a,b)=>typeof a==='string'&&timingSafeEqual(digest(a),digest(b));
@@ -20,17 +21,19 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
   const sessions=new Map(),attempts=new Map();
   const tx=fn=>{db.exec('BEGIN IMMEDIATE');try{const r=fn();db.exec('COMMIT');return r;}catch(e){db.exec('ROLLBACK');throw e;}};
   function sync(body){
+    validateSync(body);
     ensure(typeof body.deviceId==='string'&&/^[0-9a-f-]{36}$/i.test(body.deviceId),'Poste invalide.');integer(body.cursor,'Curseur');ensure(Array.isArray(body.events)&&body.events.length<=200,'Lot invalide.');
     return tx(()=>{
       const results=[];
       for(const event of body.events){
-        ensure(typeof event.id==='string'&&/^[0-9a-f-]{36}$/i.test(event.id),'Événement invalide.');integer(event.seq,'Séquence',1);ensure(['entity','sale','saleVoid','session','expense','clientPayment','supplierPayment','company','stock'].includes(event.type),'Type d’événement inconnu.');
+        ensure(typeof event.id==='string'&&/^[0-9a-f-]{36}$/i.test(event.id),'Événement invalide.');integer(event.seq,'Séquence',1);ensure(['entity','sale','saleVoid','session','expense','clientPayment','supplierPayment','company','stock','materialStock','materialPurchase'].includes(event.type),'Type d’événement inconnu.');
         const hash=digest(JSON.stringify(event)).toString('hex'),prior=db.prepare('SELECT * FROM receipts WHERE id=?').get(event.id);
         if(prior){ensure(prior.device===body.deviceId&&prior.hash===hash,'Identifiant déjà utilisé pour une autre opération.',409);results.push(JSON.parse(prior.result));continue;}
         const p=event.payload;ensure(p&&typeof p==='object'&&!Array.isArray(p),'Contenu invalide.');let result={id:event.id,status:'accepted'};
         if(event.type==='entity'){
-          ensure(['family','product','supplement','comment','expenseCategory','client','supplier'].includes(p.kind)&&typeof p.id==='string'&&p.data&&typeof p.data.name==='string','Fiche invalide.');integer(p.baseRevision,'Révision');
+          ensure(['family','product','supplement','comment','expenseCategory','client','supplier','material'].includes(p.kind)&&typeof p.id==='string'&&p.data&&typeof p.data.name==='string','Fiche invalide.');integer(p.baseRevision,'Révision');
           const current=db.prepare('SELECT * FROM entities WHERE id=?').get(p.id);
+          if(current&&p.kind==='material')ensure(JSON.parse(current.data).unit===p.data.unit,'L’unité matière ne peut pas changer.');
           if((current?.revision||0)!==p.baseRevision){result={id:event.id,status:'conflict',remote:{id:current.id,kind:current.kind,data:JSON.parse(current.data),active:!!current.active,revision:current.revision}};}
           else {const revision=(current?.revision||0)+1;db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,active=excluded.active,revision=excluded.revision').run(p.id,p.kind,JSON.stringify(p.data),Number(p.active),revision);db.prepare('INSERT INTO changes(type,payload) VALUES (?,?)').run('entity',JSON.stringify({...p,revision}));result.revision=revision;}
         }else{
@@ -41,7 +44,7 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
           if(event.type==='stock'){ensure(p.deviceId===body.deviceId&&p.id===`${body.deviceId}:${p.productId}`&&typeof p.active==='boolean','Stock invalide.');integer(p.quantity,'Stock',0,1_000_000);integer(p.minQuantity,'Seuil de stock',0,1_000_000);}
           const id=event.type==='company'?'company':p.id;ensure(typeof id==='string'&&id.length<=100,'Identifiant manquant.');
           const old=db.prepare('SELECT * FROM records WHERE type=? AND id=?').get(event.type,id);
-          if(old&&['sale','expense','clientPayment','supplierPayment','saleVoid'].includes(event.type))ensure(old.payload===JSON.stringify(p),'Un enregistrement financier ne peut pas être écrasé.',409);
+          if(old&&['sale','expense','clientPayment','supplierPayment','saleVoid','materialPurchase'].includes(event.type))ensure(old.payload===JSON.stringify(p),'Un enregistrement financier ne peut pas être écrasé.',409);
           db.prepare('INSERT INTO records VALUES (?,?,?) ON CONFLICT(type,id) DO UPDATE SET payload=excluded.payload').run(event.type,id,JSON.stringify(p));
         }
         db.prepare('INSERT INTO receipts VALUES (?,?,?,?)').run(event.id,body.deviceId,hash,JSON.stringify(result));results.push(result);
@@ -63,7 +66,7 @@ export function createCloud({file='data/cloud.db',syncToken,adminPassword}) {
     try{
       const url=new URL(req.url,'http://localhost');
       if(req.method==='GET'&&url.pathname==='/health')return send(200,{ok:true,version:1});
-      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/dashboard-period.mjs','/styles.css','/theme.css','/online.css'].includes(url.pathname)){
+      if(req.method==='GET'&&['/','/online.js','/ui.mjs','/dashboard-period.mjs','/material-units.mjs','/styles.css','/theme.css','/online.css'].includes(url.pathname)){
         const path=url.pathname==='/'?'online.html':url.pathname==='/online.js'?'cloud-ui.mjs':url.pathname.slice(1);res.writeHead(200,{'Content-Type':path.endsWith('.html')?'text/html; charset=utf-8':(path.endsWith('.js')||path.endsWith('.mjs'))?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",'X-Content-Type-Options':'nosniff'});return res.end(readFileSync(resolve(root,'frontend',path)));
       }
       let body={};if(req.method==='POST'){ensure(req.headers['content-type']?.startsWith('application/json'),'JSON requis.',415);let size=0,raw='';for await(const chunk of req){size+=chunk.length;ensure(size<=2_000_000,'Requête trop volumineuse.',413);raw+=chunk;}body=JSON.parse(raw);}
