@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -29,3 +29,19 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 30
+      - name: Publish desktop release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --target $env:GITHUB_SHA --title "Samurai POS $version" --notes "Desktop Windows : modification du stock et prix des matières premières, correction du fond d'ouverture, alimentation caisse et remises client en pourcentage."
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $exe = Get-ChildItem release/*.exe | Select-Object -ExpandProperty FullName
+          gh release upload $tag $exe --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -67,6 +67,8 @@ export class PosService {
       stockMovement:()=>{this.require(user,'stock');return this.stockMovement(args,user);},
       openSession:()=>{this.require(user,'sell');return this.openSession(args,user);},
       sessionSummary:()=>{this.require(user,'sell');const s=this.sessionRequired(user);return this.cashSummary(s.id);},
+      updateOpening:()=>{this.require(user,'close');return this.updateCash(args,user,false);},
+      cashFunding:()=>{this.require(user,'close');return this.updateCash(args,user,true);},
       closeSession:()=>{this.require(user,'close');return this.closeSession(args,user);},
       sale:()=>{this.require(user,'sell');const sale=this.createSale(args,user);if(args.print??this.settings().print.autoPrint)void this.options.vfd?.total(this.settings().vfd,sale);return sale;},
       saleByRequest:()=>{this.require(user,'sell');const requestId=label(args.requestId,'Identifiant de vente',100);const row=this.db.prepare('SELECT id FROM sales WHERE request_id=?').get(requestId);return row?this.saleDetails(row.id,user):null;},
@@ -152,7 +154,7 @@ export class PosService {
     if(kind==='supplement') {data.price=integer(args.data.price,'Prix',0);data.productIds=Array.isArray(args.data.productIds)?[...new Set(args.data.productIds)]:[];data.productIds.forEach(id=>this.entity(id,'product'));}
     if(kind==='comment') {data.productIds=Array.isArray(args.data.productIds)?[...new Set(args.data.productIds)]:[];data.productIds.forEach(id=>this.entity(id,'product'));data.client=!!args.data.client;data.kitchen=args.data.kitchen!==false;}
     if(kind==='supplier'){Object.assign(data,{contact:text(args.data.contact,120),phone:text(args.data.phone,40),email:text(args.data.email,150),address:text(args.data.address,300),taxId:text(args.data.taxId,60),notes:text(args.data.notes,500)});ensure(!data.email||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email),'Adresse e-mail invalide.');}
-    if(kind==='client') {data.phone=text(args.data.phone,40);data.address=text(args.data.address,300);data.creditLimit=integer(args.data.creditLimit||0,'Plafond de crédit');}
+    if(kind==='client') {data.phone=text(args.data.phone,40);data.address=text(args.data.address,300);data.creditLimit=integer(args.data.creditLimit||0,'Plafond de crédit');data.discountPercent=integer(args.data.discountPercent||0,'Remise client (%)',0,100);data.discountScope=args.data.discountScope||'all';ensure(['all','selected'].includes(data.discountScope),'Portée de remise invalide.');ensure(Array.isArray(args.data.discountProductIds||[]),'Produits de remise invalides.');data.discountProductIds=[...new Set(args.data.discountProductIds||[])];data.discountProductIds.forEach(id=>this.entity(id,'product'));ensure(!data.discountPercent||data.discountScope!=='selected'||data.discountProductIds.length,'Sélectionnez les produits de la remise.');}
     const id=args.id||randomUUID();const previous=this.db.prepare('SELECT * FROM entities WHERE id=?').get(id);
     if(kind==='material'){ensure(['g','piece'].includes(args.data?.unit),'Unité matière invalide.');data.unit=args.data.unit;if(previous)ensure(parse(previous.data).unit===data.unit,'L’unité d’une matière ne peut pas être modifiée.');}
     if(previous&&['product','supplement'].includes(kind)){const old=parse(previous.data);if(old.recipeConfigured){data.recipeConfigured=true;data.recipe=old.recipe||[];}}
@@ -160,7 +162,7 @@ export class PosService {
     ensure(!previous||previous.kind===kind,'Type de fiche incorrect.');
     return this.transaction(()=>{
       const revision=previous?.revision||0;this.db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,active=1').run(id,kind,JSON.stringify(data),revision,1);
-      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});if(kind==='material')this.materials.emit(id);this.audit(user,'entity.save',{id,kind});return {...data,id,active:true,revision};
+      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});if(kind==='material'){if(args.data.quantity!==undefined)this.materials.adjust(id,args.data,user);this.materials.emit(id);}this.audit(user,'entity.save',{id,kind});return {...data,id,active:true,revision};
     });
   }
   reorderProducts(args,user) {
@@ -181,6 +183,16 @@ export class PosService {
     const opening=integer(args.opening,'Fond de caisse');ensure(!this.currentSession(user),'Votre session est déjà ouverte.');
     return this.transaction(()=>{const id=randomUUID(),openedAt=now();const data={userName:user.name};this.db.prepare('INSERT INTO sessions(id,user_id,opened_at,opening,data) VALUES (?,?,?,?,?)').run(id,user.id,openedAt,opening,JSON.stringify(data));this.emit('session',{id,userName:user.name,openedAt,opening,closedAt:null});this.audit(user,'session.open',{id,opening});return this.currentSession(user);});
   }
+  updateCash(args,user,funding) {
+    const session=this.sessionRequired(user),amount=integer(funding?args.amount:args.opening,funding?'Alimentation':'Fond de caisse',funding?1:0);
+    return this.transaction(()=>{
+      const data=parse(this.db.prepare('SELECT data FROM sessions WHERE id=?').get(session.id).data);
+      if(funding){const requestId=label(args.requestId,'Identifiant alimentation',100);data.fundings ||= [];const prior=data.fundings.find(x=>x.requestId===requestId);if(prior){ensure(prior.amount===amount&&prior.note===text(args.note,300),'Alimentation déjà enregistrée avec un autre contenu.',409);return this.currentSession(user);}data.fundings.push({requestId,amount,note:text(args.note,300),createdAt:now(),userId:user.id});}
+      else {data.openingChanges ||= [];data.openingChanges.push({before:session.opening,after:amount,createdAt:now(),userId:user.id});}
+      this.db.prepare('UPDATE sessions SET opening=?,data=? WHERE id=?').run(funding?session.opening:amount,JSON.stringify(data),session.id);
+      const updated=this.currentSession(user);this.emit('session',updated);this.audit(user,funding?'session.funding':'session.opening',{id:session.id,amount});return updated;
+    });
+  }
   cashSummary(id) {
     const session=this.db.prepare('SELECT * FROM sessions WHERE id=?').get(id);ensure(session,'Session introuvable.');
     const sum=(sql,...args)=>this.db.prepare(sql).get(...args).n||0;
@@ -191,13 +203,14 @@ export class PosService {
     const supplierPayments=sum("SELECT SUM(amount) n FROM supplier_payments WHERE session_id=? AND method='cash'",id);
     const card=sum("SELECT SUM(total) n FROM sales WHERE session_id=? AND payment='card' AND voided_at IS NULL",id);
     const credit=sum("SELECT SUM(total) n FROM sales WHERE session_id=? AND payment='credit' AND voided_at IS NULL",id);
-    return {opening:session.opening,cashSales,refunds,expenses,clientPayments,supplierPayments,card,credit,expected:session.opening+cashSales-refunds-expenses+clientPayments-supplierPayments};
+    const funding=(parse(session.data).fundings||[]).reduce((n,x)=>n+x.amount,0);
+    return {funding,opening:session.opening,cashSales,refunds,expenses,clientPayments,supplierPayments,card,credit,expected:session.opening+funding+cashSales-refunds-expenses+clientPayments-supplierPayments};
   }
   closeSession(args,user) {
     const session=this.sessionRequired(user);const closing=integer(args.closing,'Espèces comptées');const reason=text(args.reason);
     return this.transaction(()=>{const summary=this.cashSummary(session.id);const variance=closing-summary.expected;
       ensure(Math.abs(variance)<=this.settings().varianceThreshold||reason.length>=5,'Expliquez l’écart de caisse avant de clôturer.');
-      const closedAt=now();this.db.prepare('UPDATE sessions SET closed_at=?,closing=?,expected=?,variance=?,data=? WHERE id=? AND closed_at IS NULL').run(closedAt,closing,summary.expected,variance,JSON.stringify({userName:user.name,reason,summary}),session.id);
+      const closedAt=now();this.db.prepare('UPDATE sessions SET closed_at=?,closing=?,expected=?,variance=?,data=? WHERE id=? AND closed_at IS NULL').run(closedAt,closing,summary.expected,variance,JSON.stringify({...session,userName:user.name,reason,summary}),session.id);
       if(this.settings().print.closure)this.db.prepare('INSERT INTO closure_print_jobs(id,session_id,created_at) VALUES (?,?,?)').run(randomUUID(),session.id,closedAt);
       this.emit('session',{...session,closedAt,closing,expected:summary.expected,variance,reason,summary});this.audit(user,'session.close',{id:session.id,variance});return {...summary,id:session.id,closing,variance,closedAt};
     });
@@ -245,16 +258,17 @@ export class PosService {
       return {lineId:randomUUID(),productId:product.id,name:product.name,kitchenName:product.kitchenName||product.name,familyId:product.familyId,familyName:this.entity(product.familyId,'family').name,quantity,price:product.price,supplements,comments,kitchenNote,total:unit*quantity};
     });
     const subtotal=items.reduce((sum,item)=>sum+item.total,0);integer(subtotal,'Montant de commande',0,100_000_000);
-    const discount=integer(args.discount||0,'Remise',0,subtotal);if(discount){this.require(user,'discount');ensure(discount<=Math.floor(subtotal*this.settings().maxDiscountPercent/100),'Remise supérieure au plafond autorisé.');}
-    const total=subtotal-discount;ensure(['cash','card','credit'].includes(args.payment),'Moyen de paiement invalide.');
     const client=args.clientId?this.entity(args.clientId,'client'):null;
+    const clientDiscount=items.reduce((n,item)=>n+(client?.discountScope!=='selected'||client?.discountProductIds?.includes(item.productId)?Math.round(item.total*(client?.discountPercent||0)/100):0),0);
+    const manualDiscount=integer(args.discount||0,'Remise',0,subtotal-clientDiscount);if(manualDiscount){this.require(user,'discount');ensure(manualDiscount<=Math.floor(subtotal*this.settings().maxDiscountPercent/100),'Remise supérieure au plafond autorisé.');}
+    const discount=clientDiscount+manualDiscount;const total=subtotal-discount;ensure(['cash','card','credit'].includes(args.payment),'Moyen de paiement invalide.');
     if(args.payment==='credit'){ensure(client,'Sélectionnez un client pour une vente à crédit.');ensure((this.clientBalances()[client.id]||0)+total<=client.creditLimit,'Plafond de crédit du client dépassé.');}
     const received=args.payment==='cash'?integer(args.received,'Montant reçu',total,100_000_000):total;
     return this.transaction(()=>{
       const ticket=Number(this.get('ticket'))+1;this.put('ticket',ticket);const displayTicket=this.db.prepare('SELECT COUNT(*) n FROM sales WHERE session_id=?').get(session.id).n+1;const id=randomUUID(),createdAt=now();
       this.materials.consume(items,id,user,createdAt);
       const costComplete=items.every(i=>i.costing.complete),knownCost=items.reduce((n,i)=>n+i.knownCost,0);
-      const sale={costComplete,knownCost,cost:costComplete?knownCost:null,id,requestId,inputHash,ticket,displayTicket,deviceId:this.get('deviceId'),sessionId:session.id,userId:user.id,userName:user.name,createdAt,day:dayInTunis(),items,subtotal,discount,total,payment:args.payment,received,change:received-total,client:client?{id:client.id,name:client.name,phone:client.phone}:null,mode:['sur_place','emporter','livraison'].includes(args.mode)?args.mode:'sur_place',note:text(args.note,300)};
+      const sale={costComplete,knownCost,cost:costComplete?knownCost:null,id,requestId,inputHash,ticket,displayTicket,deviceId:this.get('deviceId'),sessionId:session.id,userId:user.id,userName:user.name,createdAt,day:dayInTunis(),items,subtotal,discount,clientDiscount,manualDiscount,total,payment:args.payment,received,change:received-total,client:client?{id:client.id,name:client.name,phone:client.phone}:null,mode:['sur_place','emporter','livraison'].includes(args.mode)?args.mode:'sur_place',note:text(args.note,300)};
       ensure(Buffer.byteLength(JSON.stringify(sale),'utf8')<=1_750_000,'Commande trop volumineuse. Répartissez les articles sur plusieurs tickets.');
       this.db.prepare('INSERT INTO sales(id,request_id,ticket,session_id,user_id,created_at,day,total,payment,client_id,data) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id,requestId,ticket,session.id,user.id,createdAt,sale.day,total,args.payment,client?.id||null,JSON.stringify(sale));
       for(const item of items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity-item.quantity;ensure(after>=0,`Stock insuffisant pour ${item.name} (${stock.quantity} disponible).`);this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,createdAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${id}:${item.lineId}`,item.productId,stock.supplier_id,'sale',-item.quantity,stock.quantity,after,0,'',id,user.id,createdAt);this.emitStock(item.productId);}

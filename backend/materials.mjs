@@ -12,6 +12,14 @@ export class MaterialInventory {
   row(id){return this.s.db.prepare('SELECT * FROM material_inventory WHERE material_id=?').get(id);}
   snapshot(){return this.s.entities('material').map(m=>{const r=this.row(m.id);return {...m,quantity:r?.quantity||0,valueMicros:r?.value_micros||0,updatedAt:r?.updated_at||null};});}
   emit(id){const s=this.s,r=this.row(id),m=s.db.prepare('SELECT data,active FROM entities WHERE id=? AND kind=?').get(id,'material');if(!m)return;const data=json(m.data);s.emit('materialStock',{id:`${s.get('deviceId')}:${id}`,deviceId:s.get('deviceId'),materialId:id,name:data.name,unit:data.unit,active:!!m.active,quantity:r?.quantity||0,valueMicros:r?.value_micros||0,updatedAt:now()});}
+  adjust(id,args,user){
+    const material=this.s.entity(id,'material');
+    const quantity=integer(args.quantity,'Stock matière',0,1_000_000_000_000),unitPrice=integer(args.unitPrice,'Prix unitaire',0),valueMicros=roundedRatio(unitPrice*VALUE_SCALE,quantity,material.unit==='g'?1_000_000:QUANTITY_SCALE);
+    integer(valueMicros,'Valeur du stock',0,Number.MAX_SAFE_INTEGER);const r=this.row(id),createdAt=now();
+    this.s.db.prepare('INSERT INTO material_inventory VALUES (?,?,?,?) ON CONFLICT(material_id) DO UPDATE SET quantity=excluded.quantity,value_micros=excluded.value_micros,updated_at=excluded.updated_at').run(id,quantity,valueMicros,createdAt);
+    this.movement(id,'adjustment',quantity-(r?.quantity||0),valueMicros-(r?.value_micros||0),null,{userId:user.id,unitPrice},createdAt);
+    this.s.audit(user,'material.adjust',{id,quantity,unitPrice});
+  }
   saveRecipe(args,user){
     const s=this.s;ensure(['product','supplement'].includes(args.kind),'Recette réservée aux produits et suppléments.');const entity=s.entity(args.id,args.kind);
     ensure(Array.isArray(args.ingredients)&&args.ingredients.length<=100,'Recette invalide (100 matières maximum).');
