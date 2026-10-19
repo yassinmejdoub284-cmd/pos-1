@@ -7,7 +7,7 @@ if(process.env.POS_DATA_DIR){fs.mkdirSync(process.env.POS_DATA_DIR,{recursive:tr
 const locked=app.requestSingleInstanceLock();if(!locked)app.quit();else{
 app.on('second-instance',()=>{if(mainWindow){if(mainWindow.isMinimized())mainWindow.restore();mainWindow.focus();}});
 app.whenReady().then(async()=>{
-  const {openDatabase}=await import('../backend/database.mjs');const {PosService}=await import('../backend/service.mjs');const {SyncEngine}=await import('../backend/sync.mjs');const {PrintQueue}=await import('../backend/print-queue.mjs');const {receiptHtml,reportHtml,closureHtml}=await import('../backend/receipts.mjs');
+  const {openDatabase}=await import('../backend/database.mjs');const {PosService}=await import('../backend/service.mjs');const {SyncEngine}=await import('../backend/sync.mjs');const {PrintQueue}=await import('../backend/print-queue.mjs');const {receiptHtml,reportHtml,closureHtml,documentHtml,escapeHtml}=await import('../backend/receipts.mjs');const {ticketZeroBody}=await import('../backend/fiscal-receipts.mjs');
   const dataDir=process.env.POS_DATA_DIR||app.getPath('userData');fs.mkdirSync(dataDir,{recursive:true});const store=openDatabase(path.join(dataDir,'samurai-pos.sqlite'));const keyPath=path.join(dataDir,'sync-key.bin');
   const getToken=()=>{try{return safeStorage.isEncryptionAvailable()&&fs.existsSync(keyPath)?safeStorage.decryptString(fs.readFileSync(keyPath)):'';}catch{return '';}};
   const saveSyncToken=token=>{if(!safeStorage.isEncryptionAvailable())throw new Error('Le stockage protégé de Windows est indisponible.');fs.writeFileSync(keyPath,safeStorage.encryptString(token));};
@@ -32,12 +32,14 @@ app.whenReady().then(async()=>{
   }
   const runPrintJobs=()=>printQueue.drain();
   const {VfdDisplay}=await import('../backend/vfd.mjs');const {SerialTransport}=require('./vfd.cjs');serialTransport=new SerialTransport();const vfd=new VfdDisplay(serialTransport);
-  service=new PosService(store,{vfd,testMode:!!process.env.POS_TEST_MODE,printers,saveSyncToken,receipt:receiptHtml,closureReceipt:closureHtml,
+  service=new PosService(store,{protectIntegrityKey:key=>{if(!safeStorage.isEncryptionAvailable())throw Error('Stockage protégé requis pour la clé fiscale.');return safeStorage.encryptString(key.toString('base64'));},unprotectIntegrityKey:bytes=>Buffer.from(safeStorage.decryptString(bytes),'base64'),vfd,testMode:!!process.env.POS_TEST_MODE,printers,saveSyncToken,receipt:receiptHtml,closureReceipt:closureHtml,
     printSale:(sale,kind)=>printQueue.printSale(sale,kind),
+    printFiscalDocument:id=>printQueue.printFiscalDocument(id),
+    printFiscalZero:ticket=>printHtml(documentHtml(ticketZeroBody(ticket,escapeHtml),'Ticket zéro'),service.settings().print.clientPrinter,1),
     printClosure:session=>printQueue.printClosure(session),
     printReport:(report,settings)=>printHtml(reportHtml(report,settings),settings.print.clientPrinter),
     testDrawer:()=>kickDrawer(),
-    backup:async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:'Sauvegarder la base de caisse',defaultPath:`Samurai-POS-${new Date().toISOString().slice(0,10)}.sqlite`,filters:[{name:'Base SQLite',extensions:['sqlite']}]});if(result.canceled)return {cancelled:true};if(path.resolve(result.filePath).toLowerCase()===path.resolve(store.path).toLowerCase())throw new Error('Choisissez un autre fichier que la base active.');if(fs.existsSync(result.filePath))throw new Error('Choisissez un nouveau nom pour conserver la sauvegarde existante.');store.db.prepare('VACUUM INTO ?').run(result.filePath);return {path:result.filePath};}
+    backup:async()=>{const result=await dialog.showSaveDialog(mainWindow,{title:'Sauvegarder la base de caisse',defaultPath:`Samurai-POS-${new Date().toISOString().slice(0,10)}.sqlite`,filters:[{name:'Base SQLite',extensions:['sqlite']}]});if(result.canceled)return {cancelled:true};if(path.resolve(result.filePath).toLowerCase()===path.resolve(store.path).toLowerCase())throw new Error('Choisissez un autre fichier que la base active.');if(fs.existsSync(result.filePath))throw new Error('Choisissez un nouveau nom pour conserver la sauvegarde existante.');store.db.prepare('VACUUM INTO ?').run(result.filePath);const integrityKeyPath=store.path+'.integrity-key';if(fs.existsSync(integrityKeyPath))fs.copyFileSync(integrityKeyPath,result.filePath+'.integrity-key',fs.constants.COPYFILE_EXCL);const integrityHeadPath=store.path+'.integrity-head';if(fs.existsSync(integrityHeadPath))fs.copyFileSync(integrityHeadPath,result.filePath+'.integrity-head',fs.constants.COPYFILE_EXCL);return {path:result.filePath};}
   });
   engine=new SyncEngine(service,getToken);service.options.sync=engine;
   printQueue=new PrintQueue(service,{receiptHtml,closureHtml,printHtml});printQueue.recover();
@@ -46,7 +48,7 @@ app.whenReady().then(async()=>{
   mainWindow.webContents.setWindowOpenHandler(()=>({action:'deny'}));mainWindow.webContents.on('will-navigate',event=>event.preventDefault());
   ipcMain.handle('pos:call',async(event,action,args,token)=>{
     if(event.sender!==mainWindow.webContents)return {error:'Accès refusé.',status:403};
-    try{if(JSON.stringify(args).length>2_000_000)throw new Error('Requête trop volumineuse.');const result=await service.call(action,args,token);if(action==='setupStatus')signalReady(result);if(action==='sale'||action==='closeSession')void runPrintJobs();return result;}catch(error){return {error:error.message,status:error.status||400};}
+    try{if(JSON.stringify(args).length>2_000_000)throw new Error('Requête trop volumineuse.');const result=await service.call(action,args,token);if(action==='setupStatus')signalReady(result);if(['sale','closeSession','voidSale','printSale','fiscalProforma','fiscalTraining','fiscalResume','fiscalDuplicate'].includes(action))void runPrintJobs();return result;}catch(error){return {error:error.message,status:error.status||400};}
   });
   const settings=service.settings();if(!settings.print.clientPrinter&&!settings.print.kitchenPrinter){try{const list=await within(printers(),4000);const physical=list.filter(p=>!/(pdf|onenote|fax|xps)/i.test(p.name));if(physical.length===1){settings.print.clientPrinter=physical[0].name;settings.print.kitchenPrinter=physical[0].name;store.put('settings',JSON.stringify(settings));}}catch{/* Printer discovery must not prevent offline sales. */}}
   await mainWindow.loadFile(path.join(__dirname,'..','frontend','index.html'));

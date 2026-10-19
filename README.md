@@ -1,3 +1,7 @@
+## Adaptation NACEF 0.7.0
+
+Parcours fiscal S-MDF, configuration contribuable, ticket 1.1.4, états bloquants, signature avant impression, copies/remboursements distincts et journal protégé. **Préparation à valider avec les binaires et certificats officiels ; aucune homologation annoncée.** Voir [le dossier NACEF](docs/nacef/README.md) et ses limites explicites.
+
 # Samurai POS — Nouvelle application
 
 Application Windows de caisse avec base locale SQLite et service de synchronisation séparé. Interface et moteur de caisse nouveaux. La base et les secrets de la démonstration ne sont pas inclus dans l’exécutable.

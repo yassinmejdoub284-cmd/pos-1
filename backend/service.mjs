@@ -3,11 +3,13 @@ import { ensure, integer, label, dayInTunis, PosError } from './money.mjs';
 import {VFD_DEFAULTS,validateVfd,vfdMoney} from './vfd.mjs';
 import {buildReport,reportFilters} from './reporting.mjs';
 import {MaterialInventory} from './materials.mjs';
+import {FiscalService,FISCAL_DEFAULTS} from './fiscal.mjs';
 
-export const PERMISSIONS = ['suppliers','stock','sell','discount','void','catalog','clients','expenses','reports','close','users','settings','sync','backup'];
+export const PERMISSIONS = ['suppliers','stock','sell','discount','void','catalog','clients','expenses','reports','close','users','settings','sync','backup','fiscal'];
 export const DEFAULT_SETTINGS = {
   company: { name: 'Mon établissement', address: '', phone: '', taxId: '', footer: 'Merci pour votre visite !' },
   print: { clientPrinter: '', kitchenPrinter: '', drawerPrinter: '', drawerEnabled: true, drawerPin: 2, autoPrint: true, kitchen: true, closure: true, clientComments: false, kitchenComments: true, showClient: true, showLogo: false, logo: '', copies: 1 },
+  fiscal:FISCAL_DEFAULTS,
   maxDiscountPercent: 20, varianceThreshold: 5000,
   vfd: VFD_DEFAULTS,
   sync: { enabled: false, endpoint: '', intervalMinutes: 20 },
@@ -24,9 +26,11 @@ export class PosService {
     Object.assign(this, store); this.materials=new MaterialInventory(this); this.tokens = new Map(); this.attempts = new Map(); this.options = options;
     if (!this.get('settings')) this.put('settings', JSON.stringify(DEFAULT_SETTINGS));
     if(!this.get('defaultsV2')){const settings=this.settings();settings.print={...DEFAULT_SETTINGS.print,...settings.print,autoPrint:true,kitchen:true,closure:true};this.put('settings',JSON.stringify(settings));this.put('defaultsV2','1');}
+    this.fiscal=new FiscalService(this);
+    const transact=this.transaction;this.transaction=fn=>{if(this.db.prepare('SELECT 1 FROM fiscal_integrity LIMIT 1').get())this.fiscal.integrity.verify();const result=transact(fn);this.fiscal.integrity.sealHead();return result;};
   }
   settings() { const saved=parse(this.get('settings'));return {...DEFAULT_SETTINGS,...saved,print:{...DEFAULT_SETTINGS.print,...saved.print},vfd:{...VFD_DEFAULTS,...saved.vfd}}; }
-  audit(user, action, data={}) { this.db.prepare('INSERT INTO audit VALUES (?,?,?,?,?)').run(randomUUID(), user?.id || null, action, JSON.stringify(data), now()); }
+  audit(user, action, data={}) { if(!this.db.isTransaction)return this.transaction(()=>this.audit(user,action,data));const id=randomUUID();this.db.prepare('INSERT INTO audit VALUES (?,?,?,?,?)').run(id, user?.id || null, action, JSON.stringify(data), now());this.fiscal?.log(action,data,user,id); }
   emit(type, payload) {
     const seq = Number(this.get('outboxSeq')) + 1; this.put('outboxSeq', seq);
     if (type === 'entity'||type==='stock'||type==='materialStock') this.db.prepare("UPDATE outbox SET state='superseded' WHERE type=? AND state='pending' AND json_extract(payload,'$.id')=?").run(type,payload.id);
@@ -54,8 +58,9 @@ export class PosService {
     if (action==='setupStatus') return { needsSetup: !this.db.prepare('SELECT 1 FROM users LIMIT 1').get(), deviceId:this.get('deviceId'), testMode:!!this.options.testMode };
     if (action==='setup') return this.setup(args);
     if (action==='login') return this.login(args);
-    if (action==='logout') { this.tokens.delete(token); return {ok:true}; }
+    if (action==='logout') { const current=this.tokens.get(token);if(current)this.audit({id:current.id},'logout');this.tokens.delete(token); return {ok:true}; }
     const user=this.user(token);
+    this.fiscal.guard(action);
     const actions = {
       bootstrap:()=>this.bootstrap(user),
       saveEntity:()=>{this.require(user,args.kind==='material'?'stock':args.kind==='supplier'?'suppliers':args.kind==='client'?'clients':args.kind==='expenseCategory'?'expenses':'catalog');return this.saveEntity(args,user);},
@@ -70,10 +75,10 @@ export class PosService {
       updateOpening:()=>{this.require(user,'close');return this.updateCash(args,user,false);},
       cashFunding:()=>{this.require(user,'close');return this.updateCash(args,user,true);},
       closeSession:()=>{this.require(user,'close');return this.closeSession(args,user);},
-      sale:()=>{this.require(user,'sell');const sale=this.createSale(args,user);if(args.print??this.settings().print.autoPrint)void this.options.vfd?.total(this.settings().vfd,sale);return sale;},
+      sale:async()=>{this.require(user,'sell');const sale=await (this.fiscal.enabled()?this.fiscal.sale(args,user):this.createSale(args,user));if(args.print??this.settings().print.autoPrint)void this.options.vfd?.total(this.settings().vfd,sale);return sale;},
       saleByRequest:()=>{this.require(user,'sell');const requestId=label(args.requestId,'Identifiant de vente',100);const row=this.db.prepare('SELECT id FROM sales WHERE request_id=?').get(requestId);return row?this.saleDetails(row.id,user):null;},
       saleDetails:()=>this.saleDetails(args.id,user),
-      voidSale:()=>{this.require(user,'void');return this.voidSale(args,user);},
+      voidSale:()=>{this.require(user,'void');if(this.fiscal.enabled()){const original=this.saleDetails(args.id,user);ensure(original.fiscal,'Vente antérieure non fiscale : procédure de reprise nécessaire.');ensure(!original.voidedAt,'Cette vente est déjà remboursée.');return this.fiscal.sale({requestId:args.requestId||`refund:${args.id}`,reason:label(args.reason,'Motif',300)},user,{operation:'REFUND',original:{...original,refundReason:args.reason}});}return this.voidSale(args,user);},
       expense:()=>{this.require(user,'expenses');return this.createExpense(args,user);},
       clientPayment:()=>{this.require(user,'clients');return this.clientPayment(args,user);},
       supplierPayment:()=>{this.require(user,'suppliers');return this.supplierPayment(args,user);},
@@ -89,16 +94,37 @@ export class PosService {
       printers:()=>{this.require(user,'settings');return this.options.printers?.() || [];},
       testDrawer:()=>{this.require(user,'settings');ensure(this.options.testDrawer,'Tiroir disponible uniquement dans l’application bureau.');return this.options.testDrawer();},
       previewReceipt:()=>this.options.receipt?.(this.saleDetails(args.id,user), args.kind || 'client', this.settings()),
-      printSale:()=>{this.require(user,'sell');const sale=this.saleDetails(args.id,user);void this.options.vfd?.total(this.settings().vfd,sale);return this.options.printSale?.(sale,args.kind);},
+      printSale:()=>{this.require(user,'sell');const sale=this.saleDetails(args.id,user);if(sale.fiscal&&args.kind!=='kitchen')return this.printFiscalSale(sale,args,user);void this.options.vfd?.total(this.settings().vfd,sale);return this.options.printSale?.(sale,args.kind);},
       printReport:()=>{this.require(user,'reports');const settings={...this.settings(),filterNames:Object.fromEntries(this.db.prepare('SELECT id,data FROM entities').all().map(r=>[r.id,parse(r.data).name]).concat(this.db.prepare('SELECT id,name FROM users').all().map(r=>[r.id,r.name])))};return this.options.printReport?.(this.report(args),settings);},
       vfdPorts:()=>{this.require(user,'settings');return this.options.vfd?.ports()||[];},
       saveVfd:async()=>{this.require(user,'settings');const vfd=validateVfd(args);const settings=this.settings();settings.vfd=vfd;this.put('settings',JSON.stringify(settings));this.audit(user,'vfd.settings');await this.options.vfd?.configure();return vfd;},
       testVfd:()=>{this.require(user,'settings');ensure(this.settings().vfd.enabled,'Activez et enregistrez l’afficheur avant le test.');ensure(this.options.vfd,'Afficheur disponible uniquement dans l’application bureau.');return this.options.vfd.show(this.settings().vfd,['TEST AFFICHEUR','7.000 DT']);},
       vfdProduct:()=>{this.require(user,'sell');if(!this.settings().vfd.enabled)return this.options.vfd?.status()||{};const p=this.entity(args.productId,'product');ensure(Array.isArray(args.supplements||[])&&(args.supplements||[]).length<=30,'Suppléments invalides.');const extras=[...new Set(args.supplements||[])].map(id=>{const s=this.entity(id,'supplement');ensure(!s.productIds.length||s.productIds.includes(p.id),'Supplément incompatible.');return s.price;});return this.options.vfd?.show(this.settings().vfd,[p.name,vfdMoney(p.price+extras.reduce((a,b)=>a+b,0))])||{};},
-      backup:()=>{this.require(user,'backup');ensure(this.options.backup,'Sauvegarde indisponible.');return this.options.backup();},
+      backup:async()=>{this.require(user,'backup');ensure(this.options.backup,'Sauvegarde indisponible.');const result=await this.options.backup();if(!result.cancelled)this.audit(user,'backup',{path:result.path});return result;},
+      fiscalConfigure:()=>this.fiscal.configure(args,user),
+      fiscalStatus:()=>{this.fiscal.taxpayer(user);return this.fiscal.status();},
+      fiscalManifest:async()=>{this.fiscal.taxpayer(user);await this.fiscal.getManifest();return this.fiscal.status();},
+      fiscalCertificate:()=>this.fiscal.certificate(user),
+      fiscalSynchronize:()=>this.fiscal.synchronize(args,user),
+      fiscalFlushLogs:()=>{this.fiscal.taxpayer(user);return this.fiscal.flushLogs();},
+      fiscalDuplicate:()=>{this.fiscal.taxpayer(user);const original=this.fiscal.documentSale(args.id);return this.fiscal.sale({requestId:args.requestId},user,{operation:'DUPLICATE',context:original.fiscal.payload.transaction.operation.context,original});},
+      fiscalDocuments:()=>{this.fiscal.taxpayer(user);return this.fiscal.documents();},
+      fiscalPreview:()=>{this.fiscal.taxpayer(user);return this.options.receipt?.(this.fiscal.documentSale(args.id),'client',this.settings());},
+      fiscalPrint:()=>{this.fiscal.taxpayer(user);ensure(this.options.printFiscalDocument,'Impression fiscale disponible dans le bureau.');return this.options.printFiscalDocument(args.id);},
+      fiscalProforma:()=>this.fiscal.sale(args,user,{operation:'PROFORMA'}),
+      fiscalTraining:()=>this.fiscal.sale(args,user,{context:'TRAINING'}),
+      fiscalClosePeriod:()=>this.fiscal.closePeriod(args,user),
+      fiscalExport:()=>this.fiscal.exportData(args,user),
+      fiscalVerify:()=>{this.fiscal.taxpayer(user);return this.fiscal.integrity.verify();},
+      fiscalResume:()=>{this.fiscal.taxpayer(user);const doc=this.fiscal.pending();ensure(doc,'Aucun ticket à reprendre.');return this.fiscal.exclusive(()=>this.fiscal.finish(doc,user,true));},
     };
     ensure(Object.hasOwn(actions,action),'Opération inconnue.',404);
     return await actions[action]();
+  }
+  printFiscalSale(sale,args,user){
+    this.fiscal.taxpayer(user);const job=this.db.prepare("SELECT * FROM print_jobs WHERE sale_id=? AND kind='client' ORDER BY created_at LIMIT 1").get(sale.id);
+    if(job&&['pending','error'].includes(job.state))return this.options.printSale?.(sale,'client');
+    return this.fiscal.sale({requestId:args.requestId||randomUUID()},user,{operation:'DUPLICATE',original:sale});
   }
   setup(args) {
     ensure(!this.db.prepare('SELECT 1 FROM users LIMIT 1').get(),'L’établissement est déjà configuré.');
@@ -115,7 +141,7 @@ export class PosService {
     ensure(attempt.until<Date.now(),'Trop de tentatives. Réessayez dans 5 minutes.',429);
     const row=this.db.prepare('SELECT * FROM users WHERE name=? COLLATE NOCASE AND active=1').get(name);
     const valid = row && typeof args.pin==='string' && args.pin.length<=12 && timingSafeEqual(Buffer.from(hashPin(args.pin,row.salt),'hex'),Buffer.from(row.hash,'hex'));
-    if (!valid) { attempt.count++;if(attempt.count>=5){attempt.until=Date.now()+300000;attempt.count=0;}this.attempts.set(name,attempt);throw new PosError('Identifiant ou code incorrect.',401); }
+    if (!valid) { this.audit(null,'login.failed',{name,error:'Identifiant ou code incorrect'});attempt.count++;if(attempt.count>=5){attempt.until=Date.now()+300000;attempt.count=0;}this.attempts.set(name,attempt);throw new PosError('Identifiant ou code incorrect.',401); }
     this.attempts.delete(name);const token=randomBytes(32).toString('hex');this.tokens.set(token,{id:row.id,expires:Date.now()+12*3600000});
     this.audit(safeUser(row),'login');return {token,user:safeUser(row)};
   }
@@ -143,7 +169,7 @@ export class PosService {
       closurePrintJobs:this.db.prepare("SELECT j.* FROM closure_print_jobs j JOIN sessions s ON j.session_id=s.id WHERE s.user_id=? AND j.state!='done' ORDER BY j.created_at DESC LIMIT 30").all(user.id),
       lastClosure:this.db.prepare('SELECT * FROM sessions WHERE user_id=? AND closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions) ORDER BY closed_at DESC LIMIT 1').all(user.id).map(r=>this.sessionData(r))[0]||null,
       supplierTotals:allowed('suppliers')?Object.fromEntries(this.db.prepare("SELECT json_extract(data,'$.supplierId') id,SUM(amount) amount FROM expenses GROUP BY id").all().filter(r=>r.id).map(r=>[r.id,r.amount])):{},
-      permissions:PERMISSIONS,
+      permissions:PERMISSIONS,fiscal:this.fiscal.status(),
     };
   }
   saveEntity(args,user) {
@@ -154,7 +180,7 @@ export class PosService {
     if(kind==='supplement') {data.price=integer(args.data.price,'Prix',0);data.productIds=Array.isArray(args.data.productIds)?[...new Set(args.data.productIds)]:[];data.productIds.forEach(id=>this.entity(id,'product'));}
     if(kind==='comment') {data.productIds=Array.isArray(args.data.productIds)?[...new Set(args.data.productIds)]:[];data.productIds.forEach(id=>this.entity(id,'product'));data.client=!!args.data.client;data.kitchen=args.data.kitchen!==false;}
     if(kind==='supplier'){Object.assign(data,{contact:text(args.data.contact,120),phone:text(args.data.phone,40),email:text(args.data.email,150),address:text(args.data.address,300),taxId:text(args.data.taxId,60),notes:text(args.data.notes,500)});ensure(!data.email||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email),'Adresse e-mail invalide.');}
-    if(kind==='client') {data.phone=text(args.data.phone,40);data.address=text(args.data.address,300);data.creditLimit=integer(args.data.creditLimit||0,'Plafond de crédit');data.discountPercent=integer(args.data.discountPercent||0,'Remise client (%)',0,100);data.discountScope=args.data.discountScope||'all';ensure(['all','selected'].includes(data.discountScope),'Portée de remise invalide.');ensure(Array.isArray(args.data.discountProductIds||[]),'Produits de remise invalides.');data.discountProductIds=[...new Set(args.data.discountProductIds||[])];data.discountProductIds.forEach(id=>this.entity(id,'product'));ensure(!data.discountPercent||data.discountScope!=='selected'||data.discountProductIds.length,'Sélectionnez les produits de la remise.');}
+    if(kind==='client') {data.fiscalId=text(args.data.fiscalId,8);ensure(!data.fiscalId||/^\d{7}[A-Z]$/.test(data.fiscalId),'Matricule fiscal client invalide.');data.phone=text(args.data.phone,40);data.address=text(args.data.address,300);data.creditLimit=integer(args.data.creditLimit||0,'Plafond de crédit');data.discountPercent=integer(args.data.discountPercent||0,'Remise client (%)',0,100);data.discountScope=args.data.discountScope||'all';ensure(['all','selected'].includes(data.discountScope),'Portée de remise invalide.');ensure(Array.isArray(args.data.discountProductIds||[]),'Produits de remise invalides.');data.discountProductIds=[...new Set(args.data.discountProductIds||[])];data.discountProductIds.forEach(id=>this.entity(id,'product'));ensure(!data.discountPercent||data.discountScope!=='selected'||data.discountProductIds.length,'Sélectionnez les produits de la remise.');}
     const id=args.id||randomUUID();const previous=this.db.prepare('SELECT * FROM entities WHERE id=?').get(id);
     if(kind==='material'){ensure(['g','piece'].includes(args.data?.unit),'Unité matière invalide.');data.unit=args.data.unit;data.unitPrice=integer(args.data.unitPrice??(previous?parse(previous.data).unitPrice||0:0),'Prix unitaire',0);if(previous)ensure(parse(previous.data).unit===data.unit,'L’unité d’une matière ne peut pas être modifiée.');}
     if(previous&&['product','supplement'].includes(kind)){const old=parse(previous.data);if(old.recipeConfigured){data.recipeConfigured=true;data.recipe=old.recipe||[];}}
@@ -162,7 +188,7 @@ export class PosService {
     ensure(!previous||previous.kind===kind,'Type de fiche incorrect.');
     return this.transaction(()=>{
       const revision=previous?.revision||0;this.db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,active=1').run(id,kind,JSON.stringify(data),revision,1);
-      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});if(kind==='material'){if(args.data.quantity!==undefined)this.materials.adjust(id,args.data,user);this.materials.emit(id);}this.audit(user,'entity.save',{id,kind});return {...data,id,active:true,revision};
+      this.emit('entity',{id,kind,data,active:true,baseRevision:revision});if(kind==='material'){if(args.data.quantity!==undefined)this.materials.adjust(id,args.data,user);this.materials.emit(id);}this.audit(user,'entity.save',{id,kind,before:previous?parse(previous.data):null,after:data});return {...data,id,active:true,revision};
     });
   }
   reorderProducts(args,user) {
@@ -238,7 +264,8 @@ export class PosService {
     if(kind==='adjustment')ensure(note.length>=3,'Indiquez le motif de la correction.');
     return this.transaction(()=>{const current=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(product.id);ensure(current,'Suivi de stock désactivé.');const after=current.quantity+quantity;ensure(after>=0,'Stock insuffisant pour cette correction.');const id=randomUUID(),createdAt=now();this.db.prepare('UPDATE stock_items SET quantity=?,supplier_id=COALESCE(?,supplier_id),updated_at=? WHERE product_id=?').run(after,supplier?.id||null,createdAt,product.id);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,requestId,product.id,supplier?.id||null,kind,quantity,current.quantity,after,unitCost,note,null,user.id,createdAt);this.emitStock(product.id);this.audit(user,'stock.movement',{id,productId:product.id,kind,quantity});return {id,productId:product.id,quantity,after};});
   }
-  createSale(args,user) {
+  createSale(args,user,prepareOnly=false) {
+    ensure(!this.fiscal.enabled()||prepareOnly,'Le parcours fiscal doit signer la vente.');
     const requestId=label(args.requestId,'Identifiant de vente',100);
     ensure(args.print===undefined||typeof args.print==='boolean','Choix d’impression invalide.');
     const request={items:args.items,discount:args.discount||0,payment:args.payment,received:args.received,clientId:args.clientId||'',mode:args.mode||'sur_place',note:args.note||''};if(args.print!==undefined)request.print=args.print;
@@ -272,6 +299,7 @@ export class PosService {
       ensure(Buffer.byteLength(JSON.stringify(sale),'utf8')<=1_750_000,'Commande trop volumineuse. Répartissez les articles sur plusieurs tickets.');
       this.db.prepare('INSERT INTO sales(id,request_id,ticket,session_id,user_id,created_at,day,total,payment,client_id,data) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id,requestId,ticket,session.id,user.id,createdAt,sale.day,total,args.payment,client?.id||null,JSON.stringify(sale));
       for(const item of items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity-item.quantity;ensure(after>=0,`Stock insuffisant pour ${item.name} (${stock.quantity} disponible).`);this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,createdAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${id}:${item.lineId}`,item.productId,stock.supplier_id,'sale',-item.quantity,stock.quantity,after,0,'',id,user.id,createdAt);this.emitStock(item.productId);}
+      if(prepareOnly){const prepared=new Error('FISCAL_PREPARED');prepared.preparedSale=sale;throw prepared;}
       this.emit('sale',sale);this.audit(user,'sale.create',{id,ticket,total});
       const printRequested=args.print??this.settings().print.autoPrint;
       if(printRequested){for(const kind of args.print===true||this.settings().print.kitchen?['client','kitchen']:['client'])this.db.prepare('INSERT INTO print_jobs(id,sale_id,kind,created_at) VALUES (?,?,?,?)').run(randomUUID(),id,kind,createdAt);}
@@ -279,11 +307,12 @@ export class PosService {
     });
   }
   saleDetails(id,user) {const row=this.db.prepare('SELECT * FROM sales WHERE id=?').get(id);ensure(row,'Vente introuvable.');ensure(user.admin||user.permissions.includes('reports')||row.user_id===user.id,'Accès à cette vente refusé.',403);return {...parse(row.data),voidedAt:row.voided_at,voidReason:row.void_reason};}
-  voidSale(args,user) {
+  voidSale(args,user,fiscalCommitted=false) {
+    ensure(!this.fiscal.enabled()||fiscalCommitted,'Un remboursement fiscal signé est requis.');
     const reason=label(args.reason,'Motif',300);ensure(reason.length>=5,'Précisez le motif d’annulation.');const row=this.db.prepare('SELECT * FROM sales WHERE id=?').get(args.id);ensure(row,'Vente introuvable.');ensure(!row.voided_at,'Cette vente est déjà annulée.');
     const session=this.sessionRequired(user);
     if(row.payment==='credit') ensure((this.clientBalances()[row.client_id]||0)>=row.total,'Ce crédit a déjà été réglé. Effectuez un remboursement après vérification du compte client.');
-    return this.transaction(()=>{const voidedAt=now();this.materials.restore(parse(row.data),user,voidedAt);this.db.prepare('UPDATE sales SET voided_at=?,void_reason=?,void_session_id=? WHERE id=? AND voided_at IS NULL').run(voidedAt,reason,session.id,args.id);for(const item of parse(row.data).items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity+item.quantity;this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,voidedAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${row.id}:void:${item.lineId}`,item.productId,stock.supplier_id,'void',item.quantity,stock.quantity,after,0,reason,row.id,user.id,voidedAt);this.emitStock(item.productId);}this.emit('saleVoid',{id:args.id,voidedAt,reason,sessionId:session.id,userName:user.name});this.audit(user,'sale.void',{id:args.id,reason});return {ok:true};});
+    return this.transaction(()=>{const voidedAt=now();this.materials.restore(parse(row.data),user,voidedAt);this.db.prepare('UPDATE sales SET voided_at=?,void_reason=?,void_session_id=? WHERE id=? AND voided_at IS NULL').run(voidedAt,reason,session.id,args.id);for(const item of parse(row.data).items){const stock=this.db.prepare('SELECT * FROM stock_items WHERE product_id=?').get(item.productId);if(!stock)continue;const after=stock.quantity+item.quantity;this.db.prepare('UPDATE stock_items SET quantity=?,updated_at=? WHERE product_id=?').run(after,voidedAt,item.productId);this.db.prepare('INSERT INTO stock_movements VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(randomUUID(),`${row.id}:void:${item.lineId}`,item.productId,stock.supplier_id,'void',item.quantity,stock.quantity,after,0,reason,row.id,user.id,voidedAt);this.emitStock(item.productId);}this.emit('saleVoid',{id:args.id,voidedAt,reason,sessionId:session.id,userName:user.name});this.audit(user,'sale.void',{id:args.id,reason});if(args.fiscalDocumentId)this.fiscal.markApplied(args.fiscalDocumentId);return {ok:true};});
   }
   createExpense(args,user) {
     const requestId=label(args.requestId,'Identifiant de charge',100);const prior=this.db.prepare('SELECT * FROM expenses WHERE request_id=?').get(requestId);
@@ -317,6 +346,7 @@ export class PosService {
   requireClosureAccess(user){ensure(user.admin||user.permissions.includes('close')||user.permissions.includes('reports'),'Permission de clôture ou rapport requise.',403);}
   closures(args,user){this.requireClosureAccess(user);const filters=reportFilters({...args,from:args.from||'2000-01-01',to:args.to||dayInTunis()});return this.db.prepare('SELECT * FROM sessions WHERE closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions) ORDER BY closed_at DESC').all().filter(r=>{const day=dayInTunis(new Date(r.closed_at));return day>=filters.from&&day<=filters.to&&(!args.userId||r.user_id===args.userId)&&(user.admin||user.permissions.includes('reports')||r.user_id===user.id);}).map(r=>this.sessionData(r));}
   clearLocalHistory(args,user) {
+    ensure(!this.get('fiscalLocked'),'Effacement interdit : conservez les ventes et utilisez les archives fiscales.',423);
     ensure(user.admin,'Seul un administrateur peut vider le stockage.',403);
     const supplied=typeof args.code==='string'?createHash('sha256').update(args.code).digest('hex'):'';
     ensure(supplied.length===64&&timingSafeEqual(Buffer.from(supplied,'hex'),Buffer.from(CLEAR_LOCAL_CODE_HASH,'hex')),'Code de sécurité incorrect.',403);
@@ -339,7 +369,7 @@ export class PosService {
     const admin=!!args.admin,active=args.active!==false;ensure(id!==user.id||active,'Vous ne pouvez pas désactiver votre propre compte.');
     if(previous?.admin && (!admin||!active))ensure(this.db.prepare('SELECT COUNT(*) n FROM users WHERE admin=1 AND active=1 AND id!=?').get(id).n>0,'Conservez au moins un administrateur actif.');
     const salt=args.pin?randomBytes(24).toString('hex'):previous?.salt;const hash=args.pin?hashPin(this.validatePin(args.pin),salt):previous?.hash;ensure(hash,'Un code est requis pour le nouveau compte.');
-    return this.transaction(()=>{try{this.db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,hash=excluded.hash,salt=excluded.salt,permissions=excluded.permissions,active=excluded.active,admin=excluded.admin').run(id,name,hash,salt,JSON.stringify(permissions),Number(active),Number(admin));}catch(e){if(e.message.includes('UNIQUE'))throw new PosError('Cet identifiant existe déjà.');throw e;}this.audit(user,'user.save',{id,name});for(const [token,s] of this.tokens)if(s.id===id)this.tokens.delete(token);return {ok:true};});
+    return this.transaction(()=>{try{this.db.prepare('INSERT INTO users VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,hash=excluded.hash,salt=excluded.salt,permissions=excluded.permissions,active=excluded.active,admin=excluded.admin').run(id,name,hash,salt,JSON.stringify(permissions),Number(active),Number(admin));}catch(e){if(e.message.includes('UNIQUE'))throw new PosError('Cet identifiant existe déjà.');throw e;}this.audit(user,'user.save',{id,name,before:previous?safeUser(previous):null,after:{name,permissions,active,admin}});for(const [token,s] of this.tokens)if(s.id===id)this.tokens.delete(token);return {ok:true};});
   }
   saveSettings(args,user) {
     const current=this.settings();const company={name:label(args.company?.name,'Établissement'),address:text(args.company?.address,300),phone:text(args.company?.phone,40),taxId:text(args.company?.taxId,60),footer:text(args.company?.footer,300)};
@@ -351,6 +381,6 @@ export class PosService {
     if(sync.endpoint){const url=new URL(sync.endpoint);ensure(url.protocol==='https:'||(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)),'Utilisez une adresse HTTPS pour la synchronisation.');}
     if(sync.enabled)ensure(sync.endpoint,'Adresse de synchronisation requise.');
     if(typeof args.syncToken==='string'&&args.syncToken.trim()){ensure(args.syncToken.length>=16&&args.syncToken.length<=500,'Clé de synchronisation invalide.');this.options.saveSyncToken?.(args.syncToken.trim());}
-    return this.transaction(()=>{const settings={company,print,maxDiscountPercent,varianceThreshold,sync,vfd:current.vfd};this.put('settings',JSON.stringify(settings));if(sync.enabled||JSON.stringify(current.company)!==JSON.stringify(company))this.emit('company',company);this.audit(user,'settings.save');return settings;});
+    return this.transaction(()=>{const settings={company,print,maxDiscountPercent,varianceThreshold,sync,vfd:current.vfd,fiscal:current.fiscal};if(this.fiscal.enabled()){ensure(print.copies===1,'Une copie fiscale nécessite une transaction DUPLICATE.');ensure(company.taxId===current.company.taxId,'Modifiez l’identité fiscale depuis NACEF.');}this.put('settings',JSON.stringify(settings));if(sync.enabled||JSON.stringify(current.company)!==JSON.stringify(company))this.emit('company',company);this.audit(user,'settings.save',{before:{...current,sync:current.sync},after:settings});return settings;});
   }
 }

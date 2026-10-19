@@ -1,0 +1,76 @@
+Exigence,Justification ou périmètre,Référence,Statut / preuve restante
+E0101,Engagement fournisseur,maintenance.md,Organisation SoluMove à compléter
+E0102,Déclaration des ventes sur NACEF,exploitation.md,Procédure fournisseur à exécuter hors application
+E0103,Déclaration des maintenances,maintenance.md,Procédure fournisseur à exécuter hors application
+E0201,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0202,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0203,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0204,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0205,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0206,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0207,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0208,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0209,"Documentation de conception, architecture et utilisation",README.md,"Dossiers fournis à compléter par matériel réel, responsables et références de déploiement"
+E0301,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0302,Blocage sans lien S-MDF,../..//backend/nacef-client.mjs,Tests de gate et réel SDK à réaliser
+E0303,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0304,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0305,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0306,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0307,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0308,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0309,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0310,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0311,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0312,Architecture CE / S-MDF et matériel,conception-generale.md,Configuration cible / réseau / interfaces à démontrer
+E0401,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0402,Référence monotone et immuable,../../backend/fiscal.mjs,Tests NACEF
+E0403,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0404,File d’impression durable,../../backend/print-queue.mjs,"Spooler vérifié, sortie papier à démontrer"
+E0501,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0502,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0503,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0504,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0505,Copie distincte signée,../../tests/nacef.test.mjs,Tests NACEF
+E0506,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0507,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0508,Transactions et ticket signé,../../backend/fiscal-receipts.mjs,Tests locaux ; formats/QR/impression réelle à démontrer
+E0601,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0602,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0603,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0604,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0605,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0606,Versioning et affichage certificat,maintenance.md,0.7.0 ; registre clients et statut officiel à tenir
+E0701,Contrôles de droits et identifiants utilisateurs,../../backend/service.mjs,Tests de permissions ; rôles fournisseur/contribuable à valider en démonstration
+E0702,Contrôles de droits et identifiants utilisateurs,../../backend/service.mjs,Tests de permissions ; rôles fournisseur/contribuable à valider en démonstration
+E0703,Contrôles de droits et identifiants utilisateurs,../../backend/service.mjs,Tests de permissions ; rôles fournisseur/contribuable à valider en démonstration
+E0801,Configuration fiscale,../../frontend/fiscal.mjs,Écran fourni ; familles/taxes applicables à renseigner
+E0802,Configuration fiscale,../../frontend/fiscal.mjs,Écran fourni ; familles/taxes applicables à renseigner
+E0803,Validation schéma 1.1.4,../../backend/nacef-schema.mjs,Transcription des spécifications fournies ; binaire réel à confronter
+E0901,Audit et transfert /log/,../../backend/fiscal.mjs,Piste protégée et queue ; reçu serveur réel à vérifier
+E0902,Audit et transfert /log/,../../backend/fiscal.mjs,Piste protégée et queue ; reçu serveur réel à vérifier
+E0903,Audit et transfert /log/,../../backend/fiscal.mjs,Piste protégée et queue ; reçu serveur réel à vérifier
+E0904,Audit et transfert /log/,../../backend/fiscal.mjs,Piste protégée et queue ; reçu serveur réel à vérifier
+E0905,Audit et transfert /log/,../../backend/fiscal.mjs,Piste protégée et queue ; reçu serveur réel à vérifier
+E1001,Snapshots et écritures correctives,../../backend/fiscal.mjs,Tests locaux ; périmètre de capture prépaiement à évaluer
+E1002,Snapshots et écritures correctives,../../backend/fiscal.mjs,Tests locaux ; périmètre de capture prépaiement à évaluer
+E1003,Snapshots et écritures correctives,../../backend/fiscal.mjs,Tests locaux ; périmètre de capture prépaiement à évaluer
+E1101,Journal HMAC et ancre,architecture-technique.md,Tests altération et troncature ; évaluation officielle requise
+E1102,Vérification et triggers,../../backend/fiscal-integrity.mjs,Tests NACEF
+E1201,Périodes et cumul perpétuel,../../backend/fiscal.mjs,Tests locaux ; reprise historique non fiscale non certifiée
+E1202,Périodes et cumul perpétuel,../../backend/fiscal.mjs,Tests locaux ; reprise historique non fiscale non certifiée
+E1203,Périodes et cumul perpétuel,../../backend/fiscal.mjs,Tests locaux ; reprise historique non fiscale non certifiée
+E1204,Périodes et cumul perpétuel,../../backend/fiscal.mjs,Tests locaux ; reprise historique non fiscale non certifiée
+E1205,Périodes et cumul perpétuel,../../backend/fiscal.mjs,Tests locaux ; reprise historique non fiscale non certifiée
+E1301,Archive annuelle ouverte et authentifiée,administration-fiscale.md,Export et vérificateur fournis ; scellement soumis à évaluation
+E1302,Archive annuelle ouverte et authentifiée,administration-fiscale.md,Export et vérificateur fournis ; scellement soumis à évaluation
+E1303,Archive annuelle ouverte et authentifiée,administration-fiscale.md,Export et vérificateur fournis ; scellement soumis à évaluation
+E1304,Archive annuelle ouverte et authentifiée,administration-fiscale.md,Export et vérificateur fournis ; scellement soumis à évaluation
+E1401,Purge fiscale non exposée,administration-fiscale.md,Aucune suppression après activation
+E1402,Cumuls et traces conservés,../../backend/fiscal.mjs,Clôtures et journal protégés
+E1501,Conservation,administration-fiscale.md,"Politique de durées, supports et disponibilité à contractualiser"
+E1502,Conservation,administration-fiscale.md,"Politique de durées, supports et disponibilité à contractualiser"
+E1503,Supervision de capacité disque,exploitation.md,Surveillance OS à compléter / automatiser
+E1601,Sauvegarde ; restauration non exposée,maintenance.md,Sauvegarde native tracée ; récupération contrôlée à formaliser
+E1701,Exigence à examiner sur cible réelle,README.md,Non déclarée conforme automatiquement
+E1702,Manuel administration fiscale,administration-fiscale.md,Relecture et validation d’export réel nécessaires

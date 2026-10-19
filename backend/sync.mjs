@@ -3,7 +3,7 @@ export class SyncEngine {
   constructor(service,getToken,fetcher=fetch) {this.service=service;this.getToken=getToken;this.fetcher=fetcher;this.running=false;}
   async run() {
     const s=this.service,config=s.settings().sync;
-    if(!config.enabled)return {disabled:true};if(this.running)return {running:true};
+    if(s.fiscal?.enabled()&&(s.fiscal.busy||s.fiscal.pending()))return {fiscalPending:true};if(!config.enabled)return {disabled:true};if(this.running)return {running:true};
     const token=this.getToken();ensure(token,'Enregistrez une clé de synchronisation.');this.running=true;s.put('syncLastAttempt',new Date().toISOString());
     try {
       let sent=0;
@@ -12,6 +12,7 @@ export class SyncEngine {
         for(const r of s.db.prepare("SELECT * FROM outbox WHERE state='pending' ORDER BY seq LIMIT 200").all()){const event={id:r.id,seq:r.seq,type:r.type,payload:JSON.parse(r.payload)},size=Buffer.byteLength(JSON.stringify(event),'utf8')+1;ensure(size+256<=1_800_000,'Opération trop volumineuse pour la synchronisation.');if(events.length&&bytes+size>1_800_000)break;events.push(event);bytes+=size;}
         const response=await this.fetcher(`${config.endpoint}/sync`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({deviceId:s.get('deviceId'),cursor:Number(s.get('syncCursor')||0),events}),signal:AbortSignal.timeout(30000)});
         ensure(response.ok,`Serveur de synchronisation : ${response.status}.`);const data=await response.json();
+        ensure(!s.fiscal?.enabled()||!s.fiscal.busy&&!s.fiscal.pending(),'Synchronisation différée pendant une opération fiscale.',409);
         ensure(Array.isArray(data.results)&&Array.isArray(data.changes)&&Number.isSafeInteger(data.cursor),'Réponse de synchronisation invalide.');
         const ids=new Set(events.map(e=>e.id));ensure(data.results.length===events.length&&new Set(data.results.map(r=>r.id)).size===events.length,'Le serveur n’a pas confirmé chaque opération une seule fois.');
         s.transaction(()=>{
@@ -34,7 +35,8 @@ export class SyncEngine {
             if(change.type==='entity'){
               const p=change.payload;ensure(typeof p.id==='string'&&typeof p.kind==='string'&&Number.isSafeInteger(p.revision)&&p.data&&typeof p.data==='object','Fiche distante invalide.');
               if(s.db.prepare("SELECT 1 FROM outbox WHERE type='entity' AND state IN ('pending','conflict') AND json_extract(payload,'$.id')=?").get(p.id))continue;
-              s.db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,revision=excluded.revision,active=excluded.active').run(p.id,p.kind,JSON.stringify(p.data),p.revision,Number(p.active));
+              const previous=s.db.prepare('SELECT data FROM entities WHERE id=?').get(p.id);
+              s.db.prepare('INSERT INTO entities VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,revision=excluded.revision,active=excluded.active').run(p.id,p.kind,JSON.stringify(p.data),p.revision,Number(p.active));if(s.fiscal?.enabled())s.audit(null,'sync.parameters',{id:p.id,before:previous?JSON.parse(previous.data):null,after:p.data});
             }
           }
           s.put('syncCursor',data.cursor);s.put('syncLastSuccess',new Date().toISOString());s.put('syncLastError','');
