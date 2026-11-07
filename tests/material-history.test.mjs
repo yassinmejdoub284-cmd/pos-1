@@ -9,7 +9,7 @@ import {PostgresCloud} from '../backend/postgres-cloud.mjs';
 import {PGlite} from '@electric-sql/pglite';
 import {validateSync} from '../backend/cloud-validation.mjs';
 import {movementForm,renderMaterials} from '../frontend/materials.mjs';
-import {materialQuantity,purchaseTotal} from '../frontend/material-units.mjs';
+import {materialQuantity,purchaseTotal,quantityForUnit} from '../frontend/material-units.mjs';
 
 async function fixture(){
  const store=openDatabase(':memory:'),s=new PosService(store);await s.call('setup',{name:'Admin',pin:'123456',company:'Test'});const {token}=await s.call('login',{name:'Admin',pin:'123456'}),call=(a,b={})=>s.call(a,b,token),save=(kind,data,id)=>call('saveEntity',{kind,data,id});
@@ -94,5 +94,6 @@ test('anciens effacements : stock conservé, facture corrigée et prochains acha
 
 test('interface : zéro, fractions, prix unitaire, historique et pagination',()=>{
  assert.equal(materialQuantity('0','g',true),0);assert.throws(()=>materialQuantity('0','g'));assert.equal(purchaseTotal(125000,30000,'g'),3750);assert.equal(purchaseTotal(500,1000,'piece'),500);
+ assert.equal(quantityForUnit(125000,'kg'),'0.125');assert.equal(quantityForUnit(500,'g'),'0.5');assert.throws(()=>quantityForUnit(500,'kg'),/fractions de gramme/);
  const html=renderMaterials({state:{data:{materials:[],catalog:{product:[],supplement:[]}},tableSearch:'',materialTab:'history',materialHistory:{rows:[],page:0,pages:3,total:105}}});assert.match(html,/Historique du stock/);assert.match(html,/Page 1 \/ 3/);assert.match(html,/material-history-page/);
 });
