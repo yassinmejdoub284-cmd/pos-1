@@ -1,5 +1,6 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {ensure,integer,label,dayInTunis} from './money.mjs';
+import {MaterialHistory} from './material-history.mjs';
 
 // Quantities use thousandths of a gram/piece. Values use millionths of a millime.
 // Integer ratios preserve tiny ingredient costs without floating point drift.
@@ -8,7 +9,7 @@ export const roundedRatio=(value,numerator,denominator)=>Number((BigInt(value)*B
 export const costMillimes=value=>Math.round(value/VALUE_SCALE);
 const json=JSON.parse,now=()=>new Date().toISOString();
 export class MaterialInventory {
-  constructor(service){this.s=service;}
+  constructor(service){this.s=service;this.history=new MaterialHistory(this);}
   row(id){return this.s.db.prepare('SELECT * FROM material_inventory WHERE material_id=?').get(id);}
   snapshot(){return this.s.entities('material').map(m=>{const r=this.row(m.id);return {...m,quantity:r?.quantity||0,valueMicros:r?.value_micros||0,updatedAt:r?.updated_at||null};});}
   emit(id){const s=this.s,r=this.row(id),m=s.db.prepare('SELECT data,active FROM entities WHERE id=? AND kind=?').get(id,'material');if(!m)return;const data=json(m.data);s.emit('materialStock',{id:`${s.get('deviceId')}:${id}`,deviceId:s.get('deviceId'),materialId:id,name:data.name,unit:data.unit,active:!!m.active,quantity:r?.quantity||0,valueMicros:r?.value_micros||0,updatedAt:now()});}
@@ -17,7 +18,7 @@ export class MaterialInventory {
     const quantity=integer(args.quantity,'Stock matière',0,1_000_000_000_000),unitPrice=integer(args.unitPrice,'Prix unitaire',0),valueMicros=roundedRatio(unitPrice*VALUE_SCALE,quantity,material.unit==='g'?1_000_000:QUANTITY_SCALE);
     integer(valueMicros,'Valeur du stock',0,Number.MAX_SAFE_INTEGER);const r=this.row(id),createdAt=now();
     this.s.db.prepare('INSERT INTO material_inventory VALUES (?,?,?,?) ON CONFLICT(material_id) DO UPDATE SET quantity=excluded.quantity,value_micros=excluded.value_micros,updated_at=excluded.updated_at').run(id,quantity,valueMicros,createdAt);
-    this.movement(id,'adjustment',quantity-(r?.quantity||0),valueMicros-(r?.value_micros||0),null,{userId:user.id,unitPrice},createdAt);
+    this.movement(id,'adjustment',quantity-(r?.quantity||0),valueMicros-(r?.value_micros||0),null,{userId:user.id,unitPrice,afterQuantity:quantity,afterValueMicros:valueMicros},createdAt);
     this.s.audit(user,'material.adjust',{id,quantity,unitPrice});
   }
   saveRecipe(args,user){

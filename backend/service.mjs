@@ -63,6 +63,8 @@ export class PosService {
       archiveEntity:()=>{const kind=args.kind||(typeof args.id==='string'?this.db.prepare('SELECT kind FROM entities WHERE id=?').get(args.id)?.kind:undefined);this.require(user,kind==='material'?'stock':kind==='supplier'?'suppliers':kind==='client'?'clients':kind==='expenseCategory'?'expenses':'catalog');return this.archiveEntity({...args,kind},user);},
       saveRecipe:()=>{this.require(user,'stock');return this.materials.saveRecipe(args,user);},
       materialPurchase:()=>{this.require(user,'stock');return this.materials.purchase(args,user);},
+      materialHistory:()=>{this.require(user,'stock');return this.materials.history.list(args);},
+      editMaterialMovement:()=>{this.require(user,'stock');return this.materials.history.edit(args,user);},
       configureStock:()=>{this.require(user,'stock');return this.configureStock(args,user);},
       stockMovement:()=>{this.require(user,'stock');return this.stockMovement(args,user);},
       openSession:()=>{this.require(user,'sell');return this.openSession(args,user);},
@@ -327,7 +329,8 @@ export class PosService {
       const sales=this.db.prepare('SELECT COUNT(*) n FROM sales').get().n;
       const closures=this.db.prepare('SELECT COUNT(*) n FROM sessions WHERE closed_at IS NOT NULL AND id NOT IN (SELECT id FROM purged_sessions)').get().n;
       for(const row of this.db.prepare("SELECT client_id,SUM(total) amount FROM sales WHERE payment='credit' AND voided_at IS NULL GROUP BY client_id").all())this.db.prepare('INSERT INTO client_opening_balances(client_id,amount) VALUES (?,?) ON CONFLICT(client_id) DO UPDATE SET amount=amount+excluded.amount').run(row.client_id,row.amount);
-      this.db.exec("DELETE FROM print_jobs; DELETE FROM closure_print_jobs; DELETE FROM stock_movements WHERE kind IN ('sale','void'); DELETE FROM material_movements WHERE kind IN ('sale','void'); DELETE FROM sales; DELETE FROM outbox WHERE type IN ('sale','saleVoid','session'); DELETE FROM audit WHERE action IN ('sale.create','sale.void','session.open','session.close'); DELETE FROM purged_sessions;");
+      for(const row of this.db.prepare('SELECT * FROM material_inventory').all())this.materials.movement(row.material_id,'checkpoint',0,0,null,{afterQuantity:row.quantity,afterValueMicros:row.value_micros,note:'Stock conservé après effacement de l’historique des ventes'},now());
+      this.db.exec("DELETE FROM print_jobs; DELETE FROM closure_print_jobs; DELETE FROM stock_movements WHERE kind IN ('sale','void'); DELETE FROM material_movements WHERE kind IN ('sale','void'); DELETE FROM sales; DELETE FROM outbox WHERE type IN ('sale','saleVoid','saleCostCorrection','session'); DELETE FROM audit WHERE action IN ('sale.create','sale.void','session.open','session.close'); DELETE FROM purged_sessions;");
       this.db.exec("DELETE FROM sessions WHERE id NOT IN (SELECT session_id FROM expenses WHERE session_id IS NOT NULL UNION SELECT session_id FROM client_payments UNION SELECT session_id FROM supplier_payments WHERE session_id IS NOT NULL);");
       this.db.exec("INSERT OR IGNORE INTO purged_sessions(id) SELECT id FROM sessions; UPDATE sessions SET opening=0,closing=NULL,expected=NULL,variance=NULL,data='{}' WHERE id IN (SELECT id FROM purged_sessions);");
       this.audit(user,'history.clear',{sales,closures,scope:'local'});

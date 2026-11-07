@@ -39,7 +39,7 @@ jobs:
           $tag = "v$version"
           gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --target $env:GITHUB_SHA --title "Samurai POS $version" --notes "Desktop Windows : modification du stock et prix des matières premières, correction du fond d'ouverture, alimentation caisse et remises client en pourcentage."
+            gh release create $tag --target $env:GITHUB_SHA --title "Samurai POS $version" --notes "Desktop Windows : correction des achats et inventaires de matières premières anciens et récents, prix et quantités, historique avant/après et recalcul du stock, des coûts, des charges et des soldes fournisseurs. Mettre également à jour le serveur de synchronisation."
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           $exe = Get-ChildItem release/*.exe | Select-Object -ExpandProperty FullName

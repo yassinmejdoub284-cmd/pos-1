@@ -3,7 +3,7 @@ import {validateMaterialEntity,validateMaterialRecord,validateSaleCosts} from '.
 export function validateSync(body){
  ensure(body&&typeof body==='object'&&!Array.isArray(body),'Requête invalide.');
  ensure(typeof body.deviceId==='string'&&/^[0-9a-f-]{36}$/i.test(body.deviceId),'Poste invalide.');integer(body.cursor,'Curseur');ensure(Array.isArray(body.events)&&body.events.length<=200,'Lot invalide.');
- for(const event of body.events){ensure(typeof event.id==='string'&&/^[0-9a-f-]{36}$/i.test(event.id),'Événement invalide.');integer(event.seq,'Séquence',1);ensure(['entity','sale','saleVoid','session','expense','clientPayment','supplierPayment','company','stock','materialStock','materialPurchase'].includes(event.type),'Type inconnu.');
+ for(const event of body.events){ensure(typeof event.id==='string'&&/^[0-9a-f-]{36}$/i.test(event.id),'Événement invalide.');integer(event.seq,'Séquence',1);ensure(['entity','sale','saleVoid','session','expense','clientPayment','supplierPayment','company','stock','materialStock','materialPurchase','materialCorrection','saleCostCorrection'].includes(event.type),'Type inconnu.');
  const p=event.payload;ensure(p&&typeof p==='object'&&!Array.isArray(p),'Contenu invalide.');
  if(event.type==='entity'){ensure(['family','product','supplement','comment','expenseCategory','client','supplier','material'].includes(p.kind)&&typeof p.id==='string'&&p.data&&typeof p.data.name==='string'&&typeof p.active==='boolean','Fiche invalide.');integer(p.baseRevision,'Révision');validateMaterialEntity(p);}
  else{ensure(event.type==='company'||typeof p.id==='string'&&p.id.length<=100,'Identifiant manquant.');}

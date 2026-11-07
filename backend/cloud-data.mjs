@@ -2,9 +2,12 @@ import {buildReport,reportFilters,inReportPeriod} from './reporting.mjs';
 import {dayInTunis} from './money.mjs';
 export function cloudData({records,entities,devices},args={}){
  const filters=reportFilters(args),all=type=>records.filter(r=>r.type===type).map(r=>({...r.payload,syncDeviceId:r.device||r.payload.deviceId||''}));
- const sales=all('sale').map(s=>({...s,clientId:s.clientId||s.client?.id||'',clientName:s.clientName||s.client?.name||''})),voids=all('saleVoid'),voidMap=new Map(voids.map(v=>[v.id,v]));
+ const latest=(type,key)=>{const result=new Map();for(const p of all(type)){const k=key(p),prior=result.get(k);if(!prior||p.revision>prior.revision)result.set(k,p);}return result;};
+ const purchaseCorrections=latest('materialCorrection',p=>p.purchaseId||p.movementId),costCorrections=latest('saleCostCorrection',p=>p.saleId);
+ const purchaseNames=new Map(all('materialPurchase').map(p=>[p.id,p.materialName]));
+ const sales=all('sale').map(s=>{const c=costCorrections.get(s.id);return {...s,...(c?{items:s.items.map((i,n)=>({...i,costing:c.items[n].costing,knownCost:c.items[n].knownCost,cost:c.items[n].cost})),knownCost:c.knownCost,cost:c.cost,costComplete:c.costComplete}:{}),clientId:s.clientId||s.client?.id||'',clientName:s.clientName||s.client?.name||''};}),voids=all('saleVoid'),voidMap=new Map(voids.map(v=>[v.id,v]));
  const refunds=sales.filter(s=>voidMap.has(s.id)).map(s=>({...s,...voidMap.get(s.id)}));
- const expenses=all('expense'),clientPayments=all('clientPayment'),supplierPayments=all('supplierPayment'),sessions=all('session');
+ const expenses=all('expense').map(e=>{const c=purchaseCorrections.get(e.materialPurchaseId);return c?{...e,amount:c.after.amount,description:`Achat · ${purchaseNames.get(e.materialPurchaseId)||''}${c.after.note?' · '+c.after.note:''}`} :e;}),clientPayments=all('clientPayment'),supplierPayments=all('supplierPayment'),sessions=all('session');
  const report=buildReport({sales:sales.map(s=>({...s,voidedAt:voidMap.get(s.id)?.voidedAt})),refunds,expenses,sessions,clientPayments,supplierPayments},filters);
  const catalog=Object.fromEntries(['family','product','client','supplier','expenseCategory','material','supplement'].map(kind=>[kind,entities.filter(e=>e.kind===kind).map(e=>({...e.data,id:e.id,active:!!e.active,revision:e.revision}))]));
  const clientBalances={},supplierBalances={};
@@ -18,6 +21,6 @@ export function cloudData({records,entities,devices},args={}){
  const stock=all('stock').filter(s=>s.active).map(s=>({...s,productName:productNames.get(s.productId)||s.productId,supplierName:supplierNames.get(s.supplierId)||'',low:s.quantity<=s.minQuantity})).sort((a,b)=>a.productName.localeCompare(b.productName,'fr'));
  const materialNames=new Map(catalog.material.map(m=>[m.id,m.name]));
  const materials=all('materialStock').filter(m=>m.active).map(m=>({...m,name:materialNames.get(m.materialId)||m.name})).sort((a,b)=>a.name.localeCompare(b.name,'fr'));
- const materialPurchases=all('materialPurchase').filter(p=>inReportPeriod(filters,p.day,p.createdAt)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+ const materialPurchases=all('materialPurchase').map(p=>{const c=purchaseCorrections.get(p.id);return c?{...p,quantity:c.after.quantity,amount:c.after.amount,note:c.after.note,revision:c.revision,updatedAt:c.createdAt}:p;}).filter(p=>inReportPeriod(filters,p.day,p.createdAt)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
  return {materials,materialPurchases:materialPurchases.slice(0,300),materialPurchaseCount:materialPurchases.length,company:all('company')[0]||{name:'Samurai POS'},report:{...report,sales:report.sales.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,200),refunds:report.refunds.slice(0,200)},catalog,clientBalances,supplierBalances,purchases,stock,closures:closures.slice(0,300),closureCount:closures.length,devices,updatedAt:new Date().toISOString(),users:[...new Map(sales.map(s=>[s.userId,{id:s.userId,name:s.userName}])).values()]};
 }

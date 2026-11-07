@@ -33,6 +33,8 @@ export function openDatabase(path) {
     CREATE TABLE IF NOT EXISTS material_purchases(id TEXT PRIMARY KEY,request_id TEXT NOT NULL UNIQUE,user_id TEXT NOT NULL REFERENCES users(id),data TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS material_movements(id TEXT PRIMARY KEY,material_id TEXT NOT NULL REFERENCES entities(id),kind TEXT NOT NULL,quantity INTEGER NOT NULL,value_micros INTEGER NOT NULL,sale_id TEXT,data TEXT NOT NULL,created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS material_movements_date ON material_movements(created_at);
+    CREATE TABLE IF NOT EXISTS material_corrections(id TEXT PRIMARY KEY,movement_id TEXT NOT NULL REFERENCES material_movements(id),user_id TEXT NOT NULL REFERENCES users(id),data TEXT NOT NULL,created_at TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS material_corrections_movement ON material_corrections(movement_id);
   `);
   const get = key => db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;
   const put = (key,value) => db.prepare('INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
