@@ -11,12 +11,15 @@
     "test": "node scripts/test.cjs",
     "cloud": "node scripts/cloud.cjs",
     "build": "node scripts/build.cjs",
-    "build:web": "node scripts/build-web.cjs"
+    "build:web": "node scripts/build-web.cjs",
+    "build:android": "node scripts/build-android.cjs",
+    "preview:android": "node scripts/android-preview.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "electron": "40.9.1",
-    "electron-builder": "26.0.12"
+    "electron-builder": "26.0.12",
+    "esbuild": "^0.28.2"
   },
   "build": {
     "appId": "tn.samurai.pos.v2",

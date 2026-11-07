@@ -1,0 +1,59 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'com.android.application'
+}
+
+def pkg = new JsonSlurper().parse(file('../../package.json'))
+def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+def hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+
+android {
+    namespace 'tn.samurai.pos'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'tn.samurai.pos'
+        minSdk 24
+        targetSdk 35
+        versionCode((System.getenv('ANDROID_VERSION_CODE') ?: '1') as Integer)
+        versionName pkg.version
+        // Tablettes ARM uniquement : APK plus léger.
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a' }
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: 'samurai'
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs { useLegacyPackaging false }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.sqlite:sqlite-bundled:2.5.2'
+}

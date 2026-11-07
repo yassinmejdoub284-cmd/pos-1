@@ -1,0 +1,68 @@
+name: Android APK
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Tests (moteur de caisse + impression Android)
+        run: POS_TEST_RUNTIME=node node scripts/test.cjs
+      - name: Interface embarquée
+        run: node scripts/build-android.cjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Clé de signature (secrets du dépôt)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/samurai.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/samurai.jks" >> "$GITHUB_ENV"
+            echo "Signature : clé du dépôt (mises à jour sans perte de données)."
+          else
+            echo "::warning::Secret ANDROID_KEYSTORE_BASE64 absent : APK signé avec une clé de test qui change à chaque build. Installez-le seulement pour essayer."
+          fi
+      - name: Construire l'APK
+        env:
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+      - name: Nommer l'APK
+        run: |
+          version=$(node -p "require('./package.json').version")
+          mkdir -p release
+          cp android/app/build/outputs/apk/release/app-release.apk "release/Samurai-POS-Android-$version.apk"
+          ls -la release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Samurai-POS-Android
+          path: release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publier dans la release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.ANDROID_KEYSTORE_PATH != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "Samurai POS $version" --notes "Windows et Android hors ligne." || true
+          gh release upload "$tag" release/*.apk --clobber

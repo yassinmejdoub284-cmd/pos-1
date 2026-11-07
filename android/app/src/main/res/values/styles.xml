@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SamuraiPOS" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/pos_background</item>
+        <item name="android:statusBarColor">@color/pos_dark</item>
+        <item name="android:navigationBarColor">@color/pos_dark</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>

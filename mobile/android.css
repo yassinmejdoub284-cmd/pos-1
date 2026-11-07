@@ -1,0 +1,144 @@
+/* Samurai POS — réglages tablette Android : tactile, léger (pas d'animations, ombres ni flous),
+   mise en page dense pour les écrans 1280×800 et 1024×600 de 7 à 11 pouces. */
+
+/* ---------- Légèreté : rien qui force la tablette à recalculer en continu ---------- */
+*, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+* { -webkit-tap-highlight-color: transparent; box-shadow: none !important; backdrop-filter: none !important; }
+html, body { overscroll-behavior: none; touch-action: manipulation; text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+body { font-family: Roboto, 'Noto Sans', Arial, sans-serif; }
+.shell { height: 100vh; height: 100dvh; min-height: 0; }
+.product-scroll, .cart-items, .page, .modal-body, .nav, .settings-nav { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.page, .cart-items, .product-scroll { contain: content; }
+
+/* ---------- Tactile : grandes cibles, retour visuel immédiat, pas de sélection de texte ---------- */
+button, .btn, .product-card, .family-btn, .option-chip, .cart-line, .nav button, .order-tile, label.check { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+input, textarea, select { user-select: text; -webkit-user-select: text; font-size: 16px; }
+.btn { min-height: 48px; }
+.btn.small { min-height: 42px; padding: 8px 14px; }
+.btn.icon-only { min-width: 48px; }
+.product-card:hover { transform: none; border-color: inherit; }
+button:active, .btn:active, .product-card:active, .family-btn:active, .option-chip:active, .cart-line:active, .order-tile:active { filter: brightness(.9); transform: scale(.98); }
+.quantity button { min-width: 44px; min-height: 44px; font-size: 22px; }
+.remove-line { min-width: 44px; min-height: 44px; }
+.cart-mode button { min-height: 42px; }
+.family-btn { min-height: 44px; }
+.option-chip { min-height: 52px; }
+select { min-height: 44px; }
+.check input[type=checkbox] { width: 22px; height: 22px; }
+.product-pagination .btn { min-width: 120px; }
+.key, .cart-note { display: none !important; }
+
+/* ---------- Écrans courts (10" 1280×800 en hdpi ≈ 853×533, 7" 1024×600…) ---------- */
+@media (max-height: 680px) {
+  .topbar { height: 52px; min-height: 52px; padding: 0 12px; }
+  .topbar .btn { min-height: 42px; }
+  .breadcrumb > .icon, .breadcrumb > span:nth-of-type(2) { display: none; }
+  .top-actions { gap: 8px; }
+  .top-actions .date-label, .user-menu small { display: none; }
+  .avatar { width: 34px; height: 34px; }
+  .sidebar { width: 64px; padding: 10px 6px; }
+  .brand { padding: 0 0 12px; justify-content: center; }
+  .brand-mark { width: 38px; height: 38px; font-size: 20px; }
+  .nav { overflow-y: auto; gap: 4px; }
+  .nav button { padding: 11px 0; justify-content: center; min-height: 46px; }
+
+  /* Recherche et familles sur une seule ligne : 4 rangées de produits visibles. */
+  .catalog-area { padding: 8px 10px 0; display: grid; grid-template-columns: minmax(170px, 32%) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto auto; column-gap: 8px; }
+  .cashier-heading { grid-column: 1; grid-row: 1; margin-bottom: 8px; flex-wrap: nowrap; }
+  .families { grid-column: 2; grid-row: 1; margin-bottom: 8px; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .families::-webkit-scrollbar { display: none; }
+  .session-banner { grid-column: 1 / -1; grid-row: 2; padding: 8px 12px; margin-bottom: 8px; }
+  .product-scroll { grid-column: 1 / -1; grid-row: 3; min-height: 0; overflow-y: auto; }
+  .product-pagination { grid-column: 1 / -1; grid-row: 4; }
+  .option-panel { grid-column: 1 / -1; grid-row: 5; }
+  .cashier-heading > div:first-child { display: none; }
+  .search-wrap { width: 100%; max-width: none; }
+  .search-wrap input { height: 44px; }
+  .family-btn { white-space: nowrap; padding: 8px 12px; font-size: 14px; flex: none; }
+  .products { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .product-card { display: flex; align-items: stretch; min-height: 58px; height: 58px; border-radius: 10px; }
+  .product-art { width: 42px; height: auto; flex: none; }
+  .product-art .emoji { font-size: 24px; }
+  .product-plus, .product-info small { display: none; }
+  .product-info { padding: 5px 8px; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
+  .product-info h3 { font-size: 13px; line-height: 1.15; min-height: 0; max-height: 2.3em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin: 0; }
+  .product-info .price { font-size: 13.5px; margin-top: 0; line-height: 1.2; }
+  .product-info .price small { display: inline; font-size: 10px; }
+  .product-pagination { padding: 4px 0; gap: 8px; }
+  .product-pagination .btn { min-height: 38px; padding: 4px 12px; }
+  .product-pagination span { font-size: 12px; }
+
+  .option-panel { min-height: 0 !important; max-height: none !important; padding: 6px 0 8px; }
+  .option-heading { margin-bottom: 6px !important; }
+  .option-heading .assigned { display: none; }
+  .option-tabs button { padding: 7px 12px !important; font-size: 13px !important; min-height: 38px; }
+  .option-grid { display: flex !important; gap: 6px !important; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .option-grid::-webkit-scrollbar { display: none; }
+  .option-grid .option-chip { flex: none; }
+  .option-chip { min-height: 46px !important; font-size: 13px !important; padding: 6px 10px !important; }
+  .kitchen-note-editor textarea { min-height: 52px; }
+
+  .cart { width: 300px; padding: 8px 12px 8px !important; }
+  .cart-heading { margin-bottom: 6px !important; }
+  .cart-heading h2 { font-size: 15px; }
+  .passage-payment { display: none !important; }
+  .checkout-fields label { display: none; }
+  .checkout-fields select { min-height: 42px; margin-bottom: 6px; }
+  .checkout-buttons { display: grid !important; grid-template-columns: 1.35fr 1fr; }
+  .checkout-buttons .pay-btn { justify-content: center !important; text-align: center; line-height: 1.15; white-space: normal; }
+  .checkout-buttons .pay-btn .icon { display: none; }
+  .note-field input { min-height: 38px; height: 38px; font-size: 14px; }
+  .note-field { margin-top: 6px; }
+  .cart-mode { margin-bottom: 6px !important; padding: 3px; }
+  .cart-mode button { min-height: 38px; font-size: 13px; }
+  .cart-client select { min-height: 40px; margin-bottom: 6px !important; }
+  .cart-items { min-height: 40px !important; }
+  .cart.empty .cart-items .empty { padding: 8px; }
+  .cart.empty .cart-items .empty-icon, .cart.empty .cart-items .empty p { display: none; }
+  .cart-line { padding: 5px 8px; }
+  .cart-line .line-controls { margin-top: 2px; }
+  .cart-line .quantity { height: 38px; }
+  .cart-line .quantity button { min-width: 42px; min-height: 36px; height: 36px; font-size: 20px; }
+  .cart-line .remove-line { min-height: 36px; }
+  .selected-label { display: none; }
+  .totals .row { margin-bottom: 3px !important; font-size: 13px; }
+  .totals .row.total { margin-top: 4px !important; margin-bottom: 6px !important; }
+  .checkout-fields { margin-bottom: 6px !important; }
+  .checkout-fields input { min-height: 44px; }
+  .checkout-buttons { gap: 6px; }
+  .checkout-buttons .pay-btn { min-height: 54px !important; padding: 6px 8px !important; font-size: 14px; }
+
+  .page { padding: 14px; }
+  .modal-card, .modal > div { max-height: calc(100dvh - 16px); }
+}
+
+/* Tablettes 7" et portrait étroit : panier plus étroit. */
+@media (max-width: 900px) {
+  .cart { width: 280px; }
+  .products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) and (max-height: 680px) {
+  .products { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ---------- Pavé numérique tactile ---------- */
+.touch-keypad { position: fixed; z-index: 9999; display: grid; grid-template-columns: repeat(4, 62px); gap: 6px; padding: 8px; background: #202339; border-radius: 14px; }
+.touch-keypad[hidden] { display: none; }
+.touch-keypad button { height: 54px; border: 0; border-radius: 10px; background: #f4f5fa; color: #1d2033; font-size: 22px; font-weight: 700; }
+.touch-keypad button.fn { background: #d9dcea; font-size: 20px; }
+.touch-keypad button.ok { background: #1f7a62; color: #fff; font-size: 18px; }
+.touch-keypad button:active { filter: brightness(.82); }
+@media (max-height: 560px) { .touch-keypad { grid-template-columns: repeat(4, 56px); } .touch-keypad button { height: 46px; } }
+
+/* ---------- Panneau imprimante Bluetooth (Paramètres) ---------- */
+.android-printer { border: 1px solid #d8e6df; background: #f3faf6; border-radius: 12px; padding: 14px; margin-bottom: 18px; }
+.android-printer-status { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 12px; }
+.android-printer-status .dot { width: 9px; height: 9px; border-radius: 50%; background: #1f9d74; display: inline-block; }
+.android-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.android-help { font-size: 13px; color: #5d6478; margin-top: 10px; }
+html[data-theme=dark] .android-printer { background: #1d2a26; border-color: #2d4740; }
+html[data-theme=dark] .android-help { color: #a9b3c6; }
+
+.android-fatal { max-width: 520px; margin: 18vh auto; padding: 24px; text-align: center; font-size: 17px; }
+.android-fatal h1 { margin-bottom: 14px; }
+.android-fatal .btn { margin-top: 18px; }
