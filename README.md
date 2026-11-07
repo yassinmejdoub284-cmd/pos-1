@@ -6,6 +6,7 @@ Application Windows de caisse avec base locale SQLite et service de synchronisat
 
 - [Installer la caisse hors ligne chez le client](INSTALLATION-CLIENT.md) : fichier EXE portable, premier démarrage et sauvegarde.
 - [Configurer le suivi sur Vercel](DEPLOIEMENT-VERCEL.md) : construction web, PostgreSQL, variables privées et liaison avec la caisse.
+- [Installer la tablette Android hors ligne](INSTALLATION-ANDROID.md) : APK léger (3 Go de RAM), tactile, imprimante Bluetooth détectée automatiquement.
 - La version en ligne propose Rapports, Clôtures, Clients, Fournisseurs, Charges, Règlements et Synchronisations. Le fichier Windows continue de fonctionner hors ligne.
 
 ## Filtres et indicateurs du tableau de bord web

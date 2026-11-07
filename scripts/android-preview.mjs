@@ -86,7 +86,7 @@ createServer(async (req, res) => {
     const file = resolve(www, name);
     if (!file.startsWith(www) || !existsSync(file)) { res.writeHead(404); return res.end('Introuvable'); }
     let body = readFileSync(file);
-    if (name === 'index.html') body = body.toString().replace('<script type="module"', '<script src="./mock-native.js"></script><script type="module"');
+    if (name === 'index.html') body = body.toString().replace('<script src="./pos.js"', '<script src="./mock-native.js"></script><script src="./pos.js"');
     res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(body);
   } catch (error) { res.writeHead(500); res.end(error.message); }

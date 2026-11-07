@@ -12,7 +12,7 @@ esbuild.buildSync({
   entryPoints: [path.join(root, 'mobile', 'boot.mjs')],
   outfile: path.join(out, 'pos.js'),
   bundle: true,
-  format: 'esm',
+  format: 'iife',
   platform: 'browser',
   target: ['chrome70'],
   minify: true,

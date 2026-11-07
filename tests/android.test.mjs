@@ -92,8 +92,11 @@ test('Android : Buffer et node:crypto de remplacement identiques à Node', () =>
 });
 
 test('Android : moteur de caisse complet sur le pont SQLite natif (vente, clôture, base reprise du bureau)', async () => {
-  const dir = await import('node:fs').then(fs => fs.mkdtempSync(new URL('../', import.meta.url).pathname + 'test-results-android-'));
-  const path = dir + '/caisse.sqlite';
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'samurai-android-'));
+  const path = join(dir, 'caisse.sqlite');
   // Base créée par la version Windows…
   const desktop = openDatabase(path);
   const pc = new PosService(desktop, {});
@@ -101,8 +104,9 @@ test('Android : moteur de caisse complet sur le pont SQLite natif (vente, clôtu
   desktop.db.close();
   // …puis ouverte par la version Android (restauration d'une sauvegarde).
   globalThis.SamuraiNative = fakeBridge(path);
+  let db;
   try {
-    const db = nativeDatabase(globalThis.SamuraiNative);
+    db = nativeDatabase(globalThis.SamuraiNative);
     assert.throws(() => db.prepare('SELECT ?').get(true), /cannot be bound/);
     const store = initDatabase(db, 'android');
     const service = new PosService(store, {});
@@ -124,6 +128,7 @@ test('Android : moteur de caisse complet sur le pont SQLite natif (vente, clôtu
     assert.equal(store.db.prepare('SELECT count(*) n FROM sales').get().n, 1);
     assert.ok(store.db.prepare('SELECT count(*) n FROM outbox').get().n >= 3);
   } finally {
+    try { db?.close(); } catch { /* déjà fermée */ }
     delete globalThis.SamuraiNative;
     (await import('node:fs')).rmSync(dir, { recursive: true, force: true });
   }
